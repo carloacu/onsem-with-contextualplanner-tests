@@ -1,0 +1,6 @@
+[submodule "contextualplanner"]
+	path = contextualplanner
+	url = https://github.com/carloacu/contextualplanner.git
+[submodule "onsem"]
+	path = onsem
+	url = https://github.com/carloacu/onsem.git
