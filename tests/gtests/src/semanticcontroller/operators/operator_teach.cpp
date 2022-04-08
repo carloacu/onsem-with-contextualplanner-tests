@@ -184,17 +184,17 @@ TEST_F(SemanticReasonerGTests, operator_teachBehavior_frenchMainFormulation)
   memoryOperation::learnSayCommand(semMem, lingDb);
 
   EXPECT_EQ("", operator_resolveCommand("marche", semMem, lingDb));
-  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour marcher il faut dire je marche",
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour marcher il faut dire je marche. Et puis ?",
                             operator_teachBehavior("pour marcher il faut dire je marche", semMem, lingDb));
   EXPECT_EQ("Je marche.", operator_resolveCommand("marche", semMem, lingDb));
 
   EXPECT_EQ("", operator_resolveCommand("cours", semMem, lingDb));
-  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour courir il faut dire j'utilise mes jambes",
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour courir il faut dire j'utilise mes jambes. Et puis ?",
                             operator_react("pour courir il faut dire j'utilise mes jambes", semMem, lingDb));
   ONSEM_BEHAVIOR_EQ("J'utilise mes jambes.", operator_react("cours", semMem, lingDb));
 
   ONSEM_BEHAVIORNOTFOUND_EQ("Je ne sais pas grimper.", operator_react("grimpe", semMem, lingDb));
-  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour grimper il faut dire je marche et il faut sauter",
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour grimper il faut dire je marche et il faut sauter. Et puis ?",
                             operator_react("pour grimper il faut dire je marche et sauter", semMem, lingDb));
   ONSEM_BEHAVIORNOTFOUND_EQ("Je ne sais pas sauter.", operator_react("grimpe", semMem, lingDb));
   EXPECT_EQ("", operator_resolveCommand("grimpe", semMem, lingDb));
@@ -217,6 +217,12 @@ TEST_F(SemanticReasonerGTests, operator_teachBehavior_frenchMainFormulation)
                   operator_react("oui", semMem, lingDb));
   ONSEM_ANSWER_EQ("Il faut sauter.",
                   operator_react("et après", semMem, lingDb));
+  ONSEM_ANSWER_EQ("C'est fini.",
+                  operator_react("et après", semMem, lingDb));
+  ONSEM_ANSWERNOTFOUND_EQ("Je ne sais pas ce qui s'est passé juste après ça.",
+                          operator_react("et après", semMem, lingDb));
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour faire le beau il faut dire je fais le beau. Et puis ?",
+                            operator_react("pour faire le beau il faut dire je fais le beau", semMem, lingDb));
 }
 
 
@@ -226,7 +232,7 @@ TEST_F(SemanticReasonerGTests, operator_teachBehavior_cookingRecipe)
   SemanticMemory semMem;
   memoryOperation::learnSayCommand(semMem, lingDb);
 
-  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour faire des pâtes il faut de l'eau et des pâtes et puis il faut faire bouillir les pâtes",
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour faire des pâtes il faut de l'eau et des pâtes et puis il faut faire bouillir les pâtes. Et puis ?",
                             operator_react("pour faire des pâtes il faut de l'eau et des pâtes puis il faut faire bouillir les pâtes", semMem, lingDb));
   ONSEM_TEACHINGFEEDBACK_EQ("Je ne peux pas faire des pâtes mais je sais comment faire. Veux-tu que je te dise comment faire des pâtes ?",
                             operator_react("fais des pâtes", semMem, lingDb));
@@ -265,7 +271,7 @@ TEST_F(SemanticReasonerGTests, operator_teachBehavior_from_constructTeachSemExp)
   mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
   memoryOperation::teach(reaction, semMem, std::move(teachSemExp), lingDb,
                          memoryOperation::SemanticActionOperatorEnum::BEHAVIOR);
-  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour sauter \\" + resourceLabelForTests_cmd + "=#fr_FR#" + cmdValue + "\\",
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour sauter \\" + resourceLabelForTests_cmd + "=#fr_FR#" + cmdValue + "\\\t et puis ?",
                             reactionToAnswer(reaction, semMem, lingDb, language));
 
   EXPECT_EQ("\\" + resourceLabelForTests_cmd + "=#fr_FR#" + cmdValue + "\\",

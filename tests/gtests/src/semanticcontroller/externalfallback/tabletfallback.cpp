@@ -24,7 +24,7 @@ void TabletFallback::addFallback(UniqueSemanticExpression& pSemExp,
     return;
   }
 
-  auto rootGrdExp = mystd::make_unique<GroundedExpression>([this]()
+  auto rootGrdExp = mystd::make_unique<GroundedExpression>([]()
   {
     // verb
     auto statementGrd = mystd::make_unique<SemanticStatementGrounding>();
@@ -39,9 +39,9 @@ void TabletFallback::addFallback(UniqueSemanticExpression& pSemExp,
                                (mystd::make_unique<SemanticAgentGrounding>(pUserId)));
 
   rootGrdExp->children.emplace(GrammaticalType::OBJECT,
-                               [this]()
+                               []()
   {
-    auto tabletGrdExp = mystd::make_unique<GroundedExpression>([this]()
+    auto tabletGrdExp = mystd::make_unique<GroundedExpression>([]()
     {
       auto tablettGrd = mystd::make_unique<SemanticGenericGrounding>();
       tablettGrd->concepts.emplace("tablet", 4);
@@ -55,9 +55,9 @@ void TabletFallback::addFallback(UniqueSemanticExpression& pSemExp,
   }());
 
   rootGrdExp->children.emplace(GrammaticalType::PURPOSE,
-                               ([this]()
+                               ([]()
   {
-    auto findStatement = mystd::make_unique<GroundedExpression>([this]()
+    auto findStatement = mystd::make_unique<GroundedExpression>([]()
     {
       auto statementGrd = mystd::make_unique<SemanticStatementGrounding>();
       statementGrd->concepts.emplace("verb_find", 4);
@@ -65,7 +65,7 @@ void TabletFallback::addFallback(UniqueSemanticExpression& pSemExp,
     }());
 
     findStatement->children.emplace(GrammaticalType::OBJECT,
-                                    mystd::make_unique<GroundedExpression>([this]()
+                                    mystd::make_unique<GroundedExpression>([]()
     {
       auto statementGrd = mystd::make_unique<SemanticGenericGrounding>();
       statementGrd->referenceType = SemanticReferenceType::DEFINITE;
