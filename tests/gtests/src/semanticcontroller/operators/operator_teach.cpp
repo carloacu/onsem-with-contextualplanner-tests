@@ -223,6 +223,10 @@ TEST_F(SemanticReasonerGTests, operator_teachBehavior_frenchMainFormulation)
                           operator_react("et après", semMem, lingDb));
   ONSEM_TEACHINGFEEDBACK_EQ("Ok pour faire le beau il faut dire je fais le beau. Et puis ?",
                             operator_react("pour faire le beau il faut dire je fais le beau", semMem, lingDb));
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour faire le beau il faut dire je fais le beau et puis il faut lever la tête. Et puis ?",
+                            operator_react("puis il faut lever la tête", semMem, lingDb));
+  ONSEM_TEACHINGFEEDBACK_EQ("Ok pour faire le beau il faut dire je fais le beau, puis il faut lever la tête, puis il faut danser et puis il faut dire houhou. Et puis ?",
+                            operator_react("puis il faut danser et il faut dire houhou", semMem, lingDb));
 }
 
 
