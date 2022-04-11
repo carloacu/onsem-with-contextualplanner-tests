@@ -60,6 +60,7 @@ set(ONSEM_GTESTS_SRCS
   src/semanticcontroller/operators/operator_teach.cpp
   src/semanticcontroller/operators/operator_track.cpp
   src/semanticcontroller/test_agreement.cpp
+  src/semanticcontroller/test_converter.cpp
   src/semanticcontroller/test_coreference.cpp
   src/semanticcontroller/test_equivalentSemanticRepresentation.cpp
   src/semanticcontroller/test_executor.cpp

@@ -1357,7 +1357,7 @@ void MainWindow::_clearLoadedScenarios()
                               textProcToRobot, false, semMemory, _lingDb, nullptr);
       converter::semExpToText(varToValue["comportement_appris_2"], std::move(formulation2),
                               textProcToRobot, false, semMemory, _lingDb, nullptr);
-      converter::semExpToText(varToValue["comportement_appris_resultat"], converter::getFutureIndicativeFromInfinitive(std::move(behaviorDef.composition)),
+      converter::semExpToText(varToValue["comportement_appris_resultat"], converter::getFutureIndicativeAssociatedForm(std::move(behaviorDef.composition)),
                               textProcFromRobot, false, semMemory, _lingDb, nullptr);
       _chatbotProblem->problem.addVariablesToValue(varToValue);
       _chatbotProblem->problem.addFact(cp::Fact("robot_learnt_a_behavior"));
