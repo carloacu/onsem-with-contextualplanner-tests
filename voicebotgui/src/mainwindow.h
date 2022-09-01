@@ -233,12 +233,15 @@ private:
       std::list<std::string>& pReferences,
       const std::string& pText,
       SemanticLanguageEnum& pTextLanguage);
-  void _onNewTextSubmitted(const std::string& pText);
+  void _onNewTextSubmitted(const std::string& pText,
+                           const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
-                               std::set<std::string>& pActionIdsToSkip);
+                               std::set<std::string>& pActionIdsToSkip,
+                               const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _printParametersAndNotifyPlanner(const ChatbotAction& pAction,
                                         const std::string& pActionId,
-                                        const std::map<std::string, std::string>& pParameters);
+                                        const std::map<std::string, std::string>& pParameters,
+                                        const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _printChatRobotMessage(const std::string& pText);
   void _sayText(std::list<TextWithLanguage>& pTextsToSay);
   void _loadCurrScenario();
@@ -252,7 +255,7 @@ private:
                           const boost::filesystem::path& pPath);
 
   std::string _getAsrText(bool& pTextEnd);
-  void _proactivelyAskThePlanner();
+  void _proactivelyAskThePlanner(const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
 };
 
 #endif // ONSEMVOICEBOT_MAINWINDOW_H

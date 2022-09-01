@@ -113,6 +113,7 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
 void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
                         std::istream& pIstream)
 {
+  auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   boost::property_tree::ptree pTree;
   boost::property_tree::read_json(pIstream, pTree);
 
@@ -138,7 +139,7 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
     else if (currChatbotAttr.first == "goals")
     {
       for (auto& currGoalTree : currChatbotAttr.second)
-        pChatbotProblem.problem.pushBackGoal(currGoalTree.second.get_value<std::string>());
+        pChatbotProblem.problem.pushBackGoal(currGoalTree.second.get_value<std::string>(), now);
     }
   }
 }
@@ -183,12 +184,12 @@ void addChatbotDomaintoASemanticMemory(
 
     cp::Action action(currAction.precondition, currAction.effect,
                       currAction.preferInContext);
-    action.effects.add(currAction.potentialEffect);
+    action.effect.add(currAction.potentialEffect);
     action.shouldBeDoneAsapWithoutHistoryCheck = currAction.shouldBeDoneAsapWithoutHistoryCheck;
     for (const auto& currParam : currAction.parameters)
-      action.effects.add(currParam.effect);
+      action.effect.add(currParam.effect);
     if (currAction.inputPtr)
-      action.effects.add(currAction.inputPtr->effect);
+      action.effect.add(currAction.inputPtr->effect);
     actions.emplace(currActionWithId.first, std::move(action));
   }
   pChatbotDomain.compiledDomain = mystd::make_unique<cp::Domain>(actions);

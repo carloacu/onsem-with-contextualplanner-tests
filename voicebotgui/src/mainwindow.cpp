@@ -13,6 +13,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <contextualplanner/util/replacevariables.hpp>
 #include <onsem/common/utility/string.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticlanguagegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semantictimegrounding.hpp>
@@ -942,7 +943,8 @@ void MainWindow::on_actionImport_from_ldic_triggered()
 
 void MainWindow::on_lineEdit_history_newText_returnPressed()
 {
-  _onNewTextSubmitted(_ui->lineEdit_history_newText->text().toUtf8().constData());
+  auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+  _onNewTextSubmitted(_ui->lineEdit_history_newText->text().toUtf8().constData(), now);
   _ui->lineEdit_history_newText->clear();
 }
 
@@ -956,6 +958,7 @@ std::string MainWindow::_operator_react(
     const std::string& pText,
     SemanticLanguageEnum& pTextLanguage)
 {
+  auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   auto& semMemory = *_semMemoryPtr;
   if (pTextLanguage == SemanticLanguageEnum::UNKNOWN)
     pTextLanguage = linguistics::getLanguage(pText, _lingDb);
@@ -999,7 +1002,7 @@ std::string MainWindow::_operator_react(
   if (paramSelectedPtr != nullptr && _chatbotProblem)
   {
     if (!paramSelectedPtr->goalsToAdd.empty())
-      _chatbotProblem->problem.addGoals(paramSelectedPtr->goalsToAdd);
+      _chatbotProblem->problem.addGoals(paramSelectedPtr->goalsToAdd, now);
     _chatbotProblem->problem.modifyFacts(paramSelectedPtr->effect);
   }
   else
@@ -1024,7 +1027,8 @@ std::string MainWindow::_operator_react(
 
 
 
-void MainWindow::_onNewTextSubmitted(const std::string& pText)
+void MainWindow::_onNewTextSubmitted(const std::string& pText,
+                                     const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   _ui->textBrowser_chat_history->setTextColor(_inFontColor);
   _ui->textBrowser_chat_history->append(QString::fromUtf8(_inLabel.c_str()) + " \"" +
@@ -1061,7 +1065,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText)
             _currentActionParameters.clear();
             _effectAfterCurrentInput.reset();
             std::map<std::string, std::string> parameters;
-            _printParametersAndNotifyPlanner(action, actionId, parameters);
+            _printParametersAndNotifyPlanner(action, actionId, parameters, pNow);
             actinHasBeenPrinted = true;
             break;
           }
@@ -1075,7 +1079,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText)
     if (contextualAnnotation != ContextualAnnotation::QUESTION)
     {
       std::set<std::string> actionIdsToSkip;
-      _proactivityFromPlanner(textsToSay, actionIdsToSkip);
+      _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
     }
     else
     {
@@ -1090,7 +1094,8 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText)
 
 
 void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
-                                         std::set<std::string>& pActionIdsToSkip)
+                                         std::set<std::string>& pActionIdsToSkip,
+                                         const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   std::string textToSay;
   _currentActionParameters.clear();
@@ -1098,7 +1103,7 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
   if (_chatbotDomain && _chatbotProblem)
   {
     std::map<std::string, std::string> parameters;
-    auto actionId = cp::lookForAnActionToDo(parameters, _chatbotProblem->problem, *_chatbotDomain->compiledDomain, &_chatbotProblem->problem.historical);
+    auto actionId = cp::lookForAnActionToDo(parameters, _chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, nullptr, nullptr, &_chatbotProblem->problem.historical);
     if (!actionId.empty() && pActionIdsToSkip.count(actionId) == 0)
     {
       auto itAction = _chatbotDomain->actions.find(actionId);
@@ -1106,7 +1111,7 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
       {
         auto& action = itAction->second;
         std::string text = action.text;
-        cp::replaceVariables(text, _chatbotProblem->problem);
+        cp::replaceVariables(text, _chatbotProblem->problem.variablesToValue());
         _printChatRobotMessage(text);
         pTextsToSay.emplace_back(text, action.language);
 
@@ -1121,11 +1126,11 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
           memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
           memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
         }
-        _printParametersAndNotifyPlanner(action, actionId, parameters);
+        _printParametersAndNotifyPlanner(action, actionId, parameters, pNow);
         if (action.parameters.empty() && !action.inputPtr)
         {
           pActionIdsToSkip.insert(actionId);
-          _proactivityFromPlanner(pTextsToSay, pActionIdsToSkip);
+          _proactivityFromPlanner(pTextsToSay, pActionIdsToSkip, pNow);
         }
       }
     }
@@ -1135,7 +1140,8 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 
 void MainWindow::_printParametersAndNotifyPlanner(const ChatbotAction& pAction,
                                                   const std::string& pActionId,
-                                                  const std::map<std::string, std::string>& pParameters)
+                                                  const std::map<std::string, std::string>& pParameters,
+                                                  const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   std::string paramLines;
   for (const auto& currParameter : pAction.parameters)
@@ -1166,7 +1172,7 @@ void MainWindow::_printParametersAndNotifyPlanner(const ChatbotAction& pAction,
     _ui->textBrowser_chat_history->append(QString::fromUtf8(paramLines.c_str()));
   }
 
-  _chatbotProblem->problem.notifyActionDone(pActionId, pParameters, pAction.effect, &pAction.goalsToAdd);
+  cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pActionId, pParameters, pNow);
 }
 
 
@@ -1660,6 +1666,7 @@ std::string MainWindow::_getAsrText(bool& pTextEnd)
 
 void MainWindow::on_actionAdd_domain_triggered()
 {
+  auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   const QString extension = ".json";
   const QString firstStr = "Chatbot domain (*" + extension + ")";
 
@@ -1674,13 +1681,14 @@ void MainWindow::on_actionAdd_domain_triggered()
   addChatbotDomaintoASemanticMemory(*_semMemoryPtr, *_chatbotDomain, _lingDb);
   if (!_chatbotProblem)
     _chatbotProblem = mystd::make_unique<ChatbotProblem>();
-  _proactivelyAskThePlanner();
+  _proactivelyAskThePlanner(now);
 }
 
 
 
 void MainWindow::on_actionSet_problem_triggered()
 {
+  auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   const QString extension = ".json";
   const QString firstStr = "Chatbot problem (*" + extension + ")";
 
@@ -1691,15 +1699,15 @@ void MainWindow::on_actionSet_problem_triggered()
   std::ifstream file(filenameStr.c_str(), std::ifstream::in);
   _chatbotProblem = mystd::make_unique<ChatbotProblem>();
   loadChatbotProblem(*_chatbotProblem, file);
-  _proactivelyAskThePlanner();
+  _proactivelyAskThePlanner(now);
 }
 
 
-void MainWindow::_proactivelyAskThePlanner()
+void MainWindow::_proactivelyAskThePlanner(const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   std::list<TextWithLanguage> textsToSay;
   std::set<std::string> actionIdsToSkip;
-  _proactivityFromPlanner(textsToSay, actionIdsToSkip);
+  _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
   if (_ui->checkBox_enable_tts->isChecked() && !textsToSay.empty())
     _sayText(textsToSay);
 }
