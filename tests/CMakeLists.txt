@@ -1,4 +1,3 @@
 
 add_subdirectory(onsemwithplannertester)
-add_subdirectory(gtests)
-
+add_subdirectory(onsemwithplannergtests)

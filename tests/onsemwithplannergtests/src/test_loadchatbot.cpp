@@ -1,4 +1,4 @@
-#include "../semanticreasonergtests.hpp"
+#include "onsemwithplannergtests.hpp"
 #include <gtest/gtest.h>
 #include <onsem/optester/loadchatbot.hpp>
 
@@ -6,7 +6,7 @@ using namespace onsem;
 
 
 
-TEST_F(SemanticReasonerGTests, test_loadchatbotDomain)
+TEST_F(OnsemWithPlannerGTests, test_loadchatbotDomain)
 {
   std::stringstream ss;
   ss << "{                                                         \n";
@@ -56,7 +56,7 @@ TEST_F(SemanticReasonerGTests, test_loadchatbotDomain)
 
 
 
-TEST_F(SemanticReasonerGTests, test_loadchatbotProblem)
+TEST_F(OnsemWithPlannerGTests, test_loadchatbotProblem)
 {
   std::stringstream ss;
   ss << "{                                           \n";
