@@ -88,15 +88,6 @@ MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
   _nbOfSecondToWaitAfterTtsSpeech(0),
   _asrIsWaiting(true),
   _shouldWaitForNewSpeech(false),
-  fTokensPanel(),
-  fTokens(),
-  fGramPossiblities(),
-  fFinalGramPossiblities(),
-  fFinalConcepts(),
-  fContextualInfos(),
-  fTaggedTokens(),
-  fTokenTagsPossibilities(),
-  fDispDotImage(false),
   fSentenceLoader(),
   _lineEditHistorical()
 {
@@ -104,23 +95,7 @@ MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
   resize(1267, 750);
   _clearLoadedScenarios();
 
-  _ui->pushButton_micro->setText(microStr);
   _ui->pushButton_history_microForChat->setText(microStr);
-  _ui->textBrowser_genRep->viewport()->setAutoFillBackground(false);
-  _ui->textBrowser_genRep->setAttribute(Qt::WA_TranslucentBackground, true);
-
-  _ui->textBrowser_AATester_Logs_Sentiments->viewport()->setAutoFillBackground(false);
-  _ui->textBrowser_AATester_Logs_Sentiments->setAttribute(Qt::WA_TranslucentBackground, true);
-
-  _ui->textBrowser_AATester_Completeness_Value->viewport()->setAutoFillBackground(false);
-  _ui->textBrowser_AATester_Completeness_Value->setAttribute(Qt::WA_TranslucentBackground, true);
-
-  _ui->textBrowser_AATester_Logs_Compare->viewport()->setAutoFillBackground(false);
-  _ui->textBrowser_AATester_Logs_Compare->setAttribute(Qt::WA_TranslucentBackground, true);
-
-  _ui->textBrowser_AATester_Logs_Reformulation->viewport()->setAutoFillBackground(false);
-  _ui->textBrowser_AATester_Logs_Reformulation->setAttribute(Qt::WA_TranslucentBackground, true);
-  _ui->pushButton_addEquivalence_AATester_Logs_Reformulation->setVisible(false);
 
   _ui->textBrowser_chat_history->viewport()->setAutoFillBackground(false);
   _ui->textBrowser_chat_history->setAttribute(Qt::WA_TranslucentBackground, true);
@@ -129,8 +104,6 @@ MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
   _ui->textBrowser_PrintMemory->setAttribute(Qt::WA_TranslucentBackground, true);
   _ui->textBrowser_PrintMemory->setLineWrapMode(QTextEdit::NoWrap);
 
-  _ui->tabWidget_AATester_Logs->setAttribute(Qt::WA_TranslucentBackground, true);
-
   _lineEditHistorical.emplace(_ui->lineEdit_history_newText,
                               LineEditHistoricalWrapper(_ui->lineEdit_history_newText, this));
 
@@ -138,25 +111,6 @@ MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
   QTimer *timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(onRefresh()));
   timer->start(100);
-
-  fTokensPanel.setParentWidget(_ui->tab_AATester_Logs_Words);
-
-  _ui->comboBox_AATester_languageSelection->clear();
-  _ui->comboBox_AATester_languageSelection->addItem(_anyLangLabel);
-  std::list<SemanticLanguageEnum> languageTypes;
-  getAllLanguageTypes(languageTypes);
-  for (std::list<SemanticLanguageEnum>::const_iterator
-       it = languageTypes.begin(); it != languageTypes.end(); ++it)
-    _ui->comboBox_AATester_languageSelection->addItem(QString::fromUtf8
-                                                      (semanticLanguageEnum_toLegacyStr(*it).c_str()));
-  _ui->lineEdit_AATester_InputSentence->setEnabled(true);
-
-  // fill convertion output comboBox
-  for (std::size_t i = 0; i < CONV_OUTPUT_TABLE_ENDFORNOCOMPILWARNING; ++i)
-  {
-    _ui->comboBox_AATester_convertionToShow->addItem
-        (QString::fromUtf8(ConvertionOutputEnum_toStr[i].c_str()));
-  }
 
   // fill tokenizer steps
   auto fillDebugSteps = [this](std::list<std::string>& pSteps,
@@ -169,13 +123,6 @@ MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
   fillDebugSteps(fLangToTokenizerSteps[SemanticLanguageEnum::ENGLISH], SemanticLanguageEnum::ENGLISH);
   fillDebugSteps(fLangToTokenizerSteps[SemanticLanguageEnum::FRENCH], SemanticLanguageEnum::FRENCH);
   _updateCurrentLanguage(_currentLanguage);
-
-  // fill ending steps
-  _ui->comboBox_AATester_endingStep->clear();
-  for (const auto& currDebugingStep : linguistics::linguisticAnalysisFinishDebugStepEnum_toStr)
-    _ui->comboBox_AATester_endingStep->addItem(QString::fromUtf8(currDebugingStep.second.c_str()));
-  _ui->comboBox_AATester_endingStep->setCurrentIndex(_ui->comboBox_AATester_endingStep->count() - 1);
-  xSetSwitchVersionNewOrOld(true);
 
   SemanticTimeGrounding::setAnHardCodedTimeElts(true, true);
 }
@@ -257,17 +204,14 @@ void MainWindow::onRefresh()
     --_nbOfSecondToWaitAfterTtsSpeech;
   }
 
-  bool microEnabled = _ui->pushButton_micro->text() == stopMicroStr;
   bool microForChatEnabled = _ui->pushButton_history_microForChat->text() == stopMicroStr;
-  if (microEnabled || microForChatEnabled)
+  if (microForChatEnabled)
   {
     bool textEnd = false;
     auto asrText = _getAsrText(textEnd);
     if (!asrText.empty())
     {
       auto asrTextQStr = QString::fromUtf8(asrText.c_str());
-      if (microEnabled && _ui->lineEdit_AATester_InputSentence->text() != asrTextQStr)
-        _ui->lineEdit_AATester_InputSentence->setText(asrTextQStr);
       if (microForChatEnabled && (textEnd || _ui->lineEdit_history_newText->text() != asrTextQStr))
       {
         _ui->lineEdit_history_newText->setText(asrTextQStr);
@@ -279,311 +223,18 @@ void MainWindow::onRefresh()
 }
 
 
-void MainWindow::onRescaleTokens()
-{
-  const int offsetXY = 10;
-
-  // position of tokenizer labels
-  _ui->label_AATester_Logs_Words->setGeometry(_leftTokens + offsetXY, 10 + offsetXY, 150, 25);
-  _ui->label_AATester_Logs_InitGrams->setGeometry(_leftGramPoss + offsetXY, 10 + offsetXY, 170, 25);
-  _ui->label_AATester_Logs_FinalGrams->setGeometry(_leftFinalGramPoss + offsetXY, 10 + offsetXY, 170, 25);
-  _ui->label_AATester_Logs_Concepts->setGeometry(_leftFinalConcepts + offsetXY, 10 + offsetXY, 170, 25);
-  _ui->label_AATester_Logs_ContInfos->setGeometry(_leftContextualInfos + offsetXY, 10 + offsetXY, 170, 25);
-
-  fTokensPanel.setGeometry(offsetXY, 40 + offsetXY, _ui->tab_AATester_Logs_Words->width() - 20,
-                           _ui->tab_AATester_Logs_Words->height() - (40 + offsetXY + 10));
-}
-
-
-void MainWindow::xSetSwitchVersionNewOrOld(bool pNewOrOld)
-{
-  if (pNewOrOld)
-    _ui->pushButton_AATester_SwitchVersion->setText(_currentResultsStr);
-  else
-    _ui->pushButton_AATester_SwitchVersion->setText(_referenceResultsStr);
-  _newOrOldVersion = pNewOrOld;
-}
-
-
-std::string MainWindow::_getSelectedLanguageStr() const
-{
-  QString langStr = _ui->comboBox_AATester_languageSelection->currentText();
-  if (langStr == _anyLangLabel)
-    return "common";
-  return langStr.toUtf8().constData();
-}
-
-
 SemanticLanguageEnum MainWindow::_getSelectedLanguageType()
 {
-  return semanticLanguageTypeGroundingEnumFromStr(_getSelectedLanguageStr());
+  return SemanticLanguageEnum::ENGLISH; //semanticLanguageTypeGroundingEnumFromStr(_getSelectedLanguageStr());
 }
 
 
 void MainWindow::_updateCurrentLanguage(SemanticLanguageEnum pNewLanguage)
 {
   if (pNewLanguage != _currentLanguage)
-  {
-    _ui->comboBox_tokenizer_endingStep->clear();
-    auto itStepsForLanguage =
-        fLangToTokenizerSteps.find(pNewLanguage);
-    if (itStepsForLanguage != fLangToTokenizerSteps.end())
-    {
-      for (const auto& currStep : itStepsForLanguage->second)
-      {
-        _ui->comboBox_tokenizer_endingStep->addItem
-            (QString::fromUtf8(currStep.c_str()));
-      }
-    }
-    if (_ui->comboBox_tokenizer_endingStep->count() > 0)
-    {
-      _ui->comboBox_tokenizer_endingStep->addItem("finish");
-      _ui->comboBox_tokenizer_endingStep->setCurrentIndex
-          (_ui->comboBox_tokenizer_endingStep->count() - 1);
-      _ui->comboBox_tokenizer_endingStep->setEnabled(true);
-    }
-    else
-    {
-      _ui->comboBox_tokenizer_endingStep->setEnabled(false);
-    }
     _currentLanguage = pNewLanguage;
-  }
 }
 
-
-void MainWindow::xPrintDotImage(const std::string& pDotContent) const
-{
-  const auto synDotFile = _tmpFolder + "/synt.dot";
-  const auto synPngFile = _tmpFolder + "/synt.png";
-  linguistics::DotSaver::save(synDotFile, synPngFile, pDotContent);
-}
-
-
-void MainWindow::on_lineEdit_AATester_InputSentence_textChanged(const QString &arg1)
-{
-  if (!_ui->lineEdit_AATester_InputSentence->isEnabled())
-    return;
-
-  _listenToANewTokenizerStep = false;
-  SemanticLanguageEnum languageType = _getSelectedLanguageType();
-  const std::string sentence = arg1.toUtf8().constData();
-  if (languageType == SemanticLanguageEnum::UNKNOWN)
-    languageType = linguistics::getLanguage(sentence, _lingDb);
-  _updateCurrentLanguage(languageType);
-  SyntacticAnalysisResultToDisplay autoAnnotToDisplay;
-
-  SemanticAnalysisDebugOptions debugOptions;
-  debugOptions.outputFormat = PrintSemExpDiffsOutPutFormat::HTML;
-  debugOptions.convOutput = ConvertionOutputEnum(_ui->comboBox_AATester_convertionToShow->currentIndex());
-  {
-    debugOptions.endingStep.tokenizerEndingStep =
-        _ui->comboBox_tokenizer_endingStep->currentText().toUtf8().constData();
-    try
-    {
-      debugOptions.endingStep.nbOfDebugRoundsForTokens = boost::lexical_cast<std::size_t>
-          (_ui->lineEdit_AATester_tokenizer_nbOfSteps->text().toUtf8().constData());
-    }
-    catch (...)
-    {
-      debugOptions.endingStep.nbOfDebugRoundsForTokens = 1;
-    }
-
-    debugOptions.endingStep.endingStep =
-        linguistics::LinguisticAnalysisFinishDebugStepEnum(_ui->comboBox_AATester_endingStep->currentIndex());
-    try
-    {
-      debugOptions.endingStep.nbOfDebugRoundsForSynthAnalysis = boost::lexical_cast<std::size_t>
-          (_ui->lineEdit_AATester_synthGraph_nbOfSteps->text().toUtf8().constData());
-    }
-    catch (...)
-    {
-      debugOptions.endingStep.nbOfDebugRoundsForSynthAnalysis = 1;
-    }
-  }
-  std::map<std::string, std::string> equivalences;
-  _readEquivalences(equivalences, _getEquivalencesFilename());
-  SemanticDebug::debugTextAnalyze(autoAnnotToDisplay, sentence,
-                                  _spellingMistakeTypesPossibleForDebugOnTextComparisons,
-                                  debugOptions, languageType, _lingDb, &equivalences);
-  xDisplayResult(autoAnnotToDisplay);
-  _listenToANewTokenizerStep = true;
-}
-
-
-void MainWindow::on_comboBox_tokenizer_endingStep_currentIndexChanged(int)
-{
-  if (_listenToANewTokenizerStep)
-    on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-}
-
-
-void MainWindow::_clearPrintTokens()
-{
-  for (int i = 0; i < fTokens.size(); ++i)
-  {
-    delete fTokens[i];
-    delete fGramPossiblities[i];
-    delete fFinalGramPossiblities[i];
-    delete fFinalConcepts[i];
-    delete fContextualInfos[i];
-  }
-  fTokens.clear();
-  fGramPossiblities.clear();
-  fFinalGramPossiblities.clear();
-  fFinalConcepts.clear();
-  fContextualInfos.clear();
-}
-
-
-void MainWindow::_clearPrintTags()
-{
-  for (int i = 0; i < fTaggedTokens.size(); ++i)
-  {
-    delete fTaggedTokens[i];
-    delete fTokenTagsPossibilities[i];
-  }
-  fTaggedTokens.clear();
-  fTokenTagsPossibilities.clear();
-}
-
-
-void MainWindow::xDisplayResult
-(const SyntacticAnalysisResultToDisplay& pAutoAnnotToDisplay)
-{
-  xPrintDotImage(pAutoAnnotToDisplay.highLevelResults.syntGraphStr);
-  _clearPrintTokens();
-  _clearPrintTags();
-  int idToken = 0;
-  auto initGramsIt = pAutoAnnotToDisplay.highLevelResults.initialGramPossibilities.begin();
-  auto finalGramsIt = pAutoAnnotToDisplay.finalGramPossibilities.begin();
-  auto finalConceptsIt = pAutoAnnotToDisplay.finalConcepts.begin();
-  auto contextualInfosIt = pAutoAnnotToDisplay.contextualInfos.begin();
-  for (auto tokensIt = pAutoAnnotToDisplay.tokens.begin();
-       tokensIt != pAutoAnnotToDisplay.tokens.end(); ++tokensIt, ++initGramsIt, ++finalGramsIt, ++finalConceptsIt, ++contextualInfosIt)
-  {
-    fTokens << new QLabel(fTokensPanel.getContentWidget());
-    fGramPossiblities << new QComboBox(fTokensPanel.getContentWidget());
-    fFinalGramPossiblities << new QComboBox(fTokensPanel.getContentWidget());
-    fFinalConcepts << new QComboBox(fTokensPanel.getContentWidget());
-    fContextualInfos << new QComboBox(fTokensPanel.getContentWidget());
-    fTokens[idToken]->setGeometry(static_cast<int>(_leftTokens + tokensIt->first * 20),
-                                  static_cast<int>(10 + idToken * 30), 150, 25);
-    fGramPossiblities[idToken]->setGeometry(static_cast<int>(_leftGramPoss + tokensIt->first * 20),
-                                            static_cast<int>(10 + idToken * 30), 200, 25);
-    fFinalGramPossiblities[idToken]->setGeometry(static_cast<int>(_leftFinalGramPoss + tokensIt->first * 20),
-                                                 static_cast<int>(10 + idToken * 30), 200, 25);
-    fFinalConcepts[idToken]->setGeometry(static_cast<int>(_leftFinalConcepts + tokensIt->first * 20),
-                                         static_cast<int>(10 + idToken * 30), 200, 25);
-    fContextualInfos[idToken]->setGeometry(static_cast<int>(_leftContextualInfos + tokensIt->first * 20),
-                                           static_cast<int>(10 + idToken * 30), 200, 25);
-    fTokens[idToken]->setText(QString::fromUtf8(tokensIt->second.c_str()));
-    for (const auto& currGram : *initGramsIt)
-      fGramPossiblities[idToken]->addItem(QString::fromUtf8(currGram.c_str()));
-    if (initGramsIt->size() == 1)
-      fGramPossiblities[idToken]->setEnabled(false);
-    for (const auto& currGram : *finalGramsIt)
-      fFinalGramPossiblities[idToken]->addItem(QString::fromUtf8(currGram.c_str()));
-    if (finalGramsIt->size() == 1)
-      fFinalGramPossiblities[idToken]->setEnabled(false);
-    for (const auto& currCpt : *finalConceptsIt)
-      fFinalConcepts[idToken]->addItem(QString::fromUtf8(currCpt.c_str()));
-    if (finalConceptsIt->size() == 1)
-      fFinalConcepts[idToken]->setEnabled(false);
-    for (const auto& currContInfo : *contextualInfosIt)
-      fContextualInfos[idToken]->addItem(QString::fromUtf8(currContInfo.c_str()));
-    if (contextualInfosIt->size() == 1)
-      fContextualInfos[idToken]->setEnabled(false);
-
-
-    fTokens[idToken]->show();
-    fGramPossiblities[idToken]->show();
-    fFinalGramPossiblities[idToken]->show();
-    if (!finalConceptsIt->empty())
-    {
-      fFinalConcepts[idToken]->setVisible(true);
-      fFinalConcepts[idToken]->show();
-    }
-    else
-    {
-      fFinalConcepts[idToken]->setVisible(false);
-    }
-    if (!contextualInfosIt->empty())
-    {
-      fContextualInfos[idToken]->setVisible(true);
-      fContextualInfos[idToken]->show();
-    }
-    else
-    {
-      fContextualInfos[idToken]->setVisible(false);
-    }
-    ++idToken;
-  }
-
-  fTokensPanel.setContentHeight(10 + idToken * 30);
-
-  idToken = 0;
-  std::list<std::list<std::string> >::const_iterator
-      tagsIt = pAutoAnnotToDisplay.taggedTokensTagsPossibilities.begin();
-  for (std::list<std::string>::const_iterator tokensIt = pAutoAnnotToDisplay.taggedTokens.begin();
-       tokensIt != pAutoAnnotToDisplay.taggedTokens.end();
-       ++tokensIt, ++tagsIt)
-  {
-    fTaggedTokens << new QLabel(_ui->tabWidget_AATester_Logs);
-    fTokenTagsPossibilities << new QComboBox(_ui->tabWidget_AATester_Logs);
-    fTaggedTokens[idToken]->setGeometry(10, 45 + idToken * 30, 150, 25);
-    fTokenTagsPossibilities[idToken]->setGeometry(170, 45 + idToken * 30, 110, 25);
-    fTaggedTokens[idToken]->setText(QString::fromUtf8(tokensIt->c_str()));
-    fTokenTagsPossibilities[idToken]->addItem(QString::fromUtf8(tagsIt->begin()->c_str()));
-    fTokenTagsPossibilities[idToken]->setEnabled(false);
-    fTaggedTokens[idToken]->show();
-    fTokenTagsPossibilities[idToken]->show();
-    ++idToken;
-  }
-
-  _ui->label_AATester_Logs_Performances->setText
-      (QString::fromUtf8(pAutoAnnotToDisplay.performances.c_str()));
-
-  _ui->textBrowser_genRep->setHtml
-      (QString::fromUtf8(pAutoAnnotToDisplay.highLevelResults.semExpStr.c_str()));
-
-  _ui->textBrowser_AATester_Logs_Sentiments->setText
-      (QString::fromUtf8(pAutoAnnotToDisplay.highLevelResults.sentimentsInfos.c_str()));
-
-  _ui->textBrowser_AATester_Completeness_Value->setText
-      (pAutoAnnotToDisplay.highLevelResults.completeness ? "The text is complete" : "The text needs to be completed");
-
-  std::string reformulationsStr = pAutoAnnotToDisplay.highLevelResults.reformulations;
-  if (!pAutoAnnotToDisplay.isReformulationOk)
-    reformulationsStr += "\n\n\n\n\nReformulation is maybe bad";
-  _ui->textBrowser_AATester_Logs_Reformulation->setText(QString::fromUtf8(reformulationsStr.c_str()));
-  _ui->pushButton_addEquivalence_AATester_Logs_Reformulation->setVisible
-      (!pAutoAnnotToDisplay.isReformulationOk);
-  _currReformulationInSameLanguage = pAutoAnnotToDisplay.highLevelResults.reformulationInputLanguage;
-
-  fDispDotImage = true;
-  const std::string syntPngFile = _tmpFolder + "/synt.png";
-  _showImageInACanvas(syntPngFile,
-                      *_ui->tab_AATester_Logs_SyntacticGraph,
-                      *_ui->comboBox_AATester_syntGraph);
-}
-
-
-void MainWindow::onRescaleSynthGraph()
-{
-  _ui->widget_synthGraphEndingStep->setGeometry
-      (_ui->tabWidget_AATester_Logs->width() - _ui->widget_synthGraphEndingStep->width() - 10,
-       _ui->widget_synthGraphEndingStep->y(),
-       _ui->widget_synthGraphEndingStep->width(),
-       _ui->widget_synthGraphEndingStep->height());
-
-  if (fDispDotImage)
-  {
-    const auto synthFilename = _tmpFolder + "/synt.png";
-    _showImageInACanvas(synthFilename,
-                        *_ui->tab_AATester_Logs_SyntacticGraph,
-                        *_ui->comboBox_AATester_syntGraph);
-  }
-}
 
 
 void MainWindow::_showImageInACanvas
@@ -625,8 +276,6 @@ void MainWindow::on_pushButton_AATester_PrevSentence_clicked()
 {
   std::string sentence;
   fSentenceLoader.getPrevSentence(sentence);
-  _ui->lineEdit_AATester_InputSentence->setText
-      (QString::fromUtf8(sentence.c_str()));
   if (!_newOrOldVersion)
     xDisplayOldResult();
 }
@@ -636,8 +285,6 @@ void MainWindow::on_pushButton_AATester_NextSentence_clicked()
 {
   std::string sentence;
   fSentenceLoader.getNextSentence(sentence);
-  _ui->lineEdit_AATester_InputSentence->setText
-      (QString::fromUtf8(sentence.c_str()));
   if (!_newOrOldVersion)
     xDisplayOldResult();
 }
@@ -649,99 +296,12 @@ void MainWindow::xDisplayOldResult()
       *fSentenceLoader.getOldResults().oldResultThatDiffers[fSentenceLoader.getCurrIndex()];
   SemanticDebug::semAnalResultToStructToDisplay(autoAnnotToDisplay, resToDisp.semAnal);
   autoAnnotToDisplay.highLevelResults = resToDisp.semAnalHighLevelResults;
-  xDisplayResult(autoAnnotToDisplay);
 }
 
-
-void MainWindow::on_pushButton_AATester_Logs_Compare_OldXml_clicked()
-{
-  const std::string selLanguageStr = _getSelectedLanguageStr();
-  SentencesLoader sentencesXml;
-  auto copusFolder = _corpusFolder.string() + "/input";
-  sentencesXml.loadFolder(copusFolder + "/" + selLanguageStr);
-  syntacticAnalysisXmlSaver::save(_corpusResultsFolder.string() + "/" +
-                                  selLanguageStr + "_syntacticanalysis_results.xml",
-                                  _getSelectedLanguageType(), sentencesXml.getSentences(), _lingDb);
-}
-
-
-void MainWindow::on_pushButton_AATester_Logs_Compare_NewXml_clicked()
-{
-  auto diffResults = std::make_shared<syntacticAnalysisXmlLoader::DeserializedTextResults>();
-  diffResults->whatNeedToChecked.tokens =
-      _ui->checkBox_regressiontests_tokens->isChecked();
-  diffResults->whatNeedToChecked.tagsGram =
-      _ui->checkBox_regressiontests_gramtags->isChecked();
-  diffResults->whatNeedToChecked.tokConcepts =
-      _ui->checkBox_regressiontests_concepts->isChecked();
-  diffResults->whatNeedToChecked.syntaticGraph =
-      _ui->checkBox_regressiontests_syntgraph->isChecked();
-  diffResults->whatNeedToChecked.syntaticGraph =
-      _ui->checkBox_regressiontests_syntgraph->isChecked();
-  diffResults->whatNeedToChecked.sentimentsInfos =
-      _ui->checkBox_regressiontests_sentimentsinfos->isChecked();
-  diffResults->whatNeedToChecked.completeness =
-      _ui->checkBox_regressiontests_completeness->isChecked();
-  diffResults->whatNeedToChecked.semExps =
-      _ui->checkBox_regressiontests_semexps->isChecked();
-  diffResults->whatNeedToChecked.reformulations =
-      _ui->checkBox_regressiontests_reformulations->isChecked();
-  diffResults->whatNeedToChecked.input_reformulation =
-      _ui->checkBox_regressiontests_inputReformulation->isChecked();
-
-  std::map<std::string, std::string> equivalences;
-  if (diffResults->whatNeedToChecked.input_reformulation)
-    _readEquivalences(equivalences, _getEquivalencesFilename());
-  std::string performances;
-  syntacticAnalysisXmlSaver::compareResults(diffResults, _getSelectedLanguageStr(), _lingDb, _corpusResultsFolder.string(),
-                                            &equivalences, &performances);
-  _ui->label_AATester_Logs_Performances->setText(QString::fromUtf8(performances.c_str()));
-
-  _ui->textBrowser_AATester_Logs_Compare->setText(QString::fromUtf8(diffResults->bilan.c_str()));
-  if (!diffResults->diffsInputSentences.empty())
-  {
-    xSetSwitchVersionNewOrOld(true);
-    _ui->pushButton_AATester_SwitchVersion->setEnabled(true);
-
-    fSentenceLoader.loadSentencesWithOldResults(diffResults);
-    _ui->pushButton_AATester_PrevSentence->setEnabled(true);
-    _ui->pushButton_AATester_NextSentence->setEnabled(true);
-  }
-}
 
 void MainWindow::onRescale()
 {
-  onRescaleLinguisticAnalyzerPanel();
   onRescaleChatPanel();
-}
-
-void MainWindow::onRescaleLinguisticAnalyzerPanel()
-{
-  _ui->comboBox_AATester_languageSelection->setGeometry(_ui->tab_AATester->width() - _ui->comboBox_AATester_languageSelection->width() - 10,
-                                                        _ui->comboBox_AATester_languageSelection->y(),
-                                                        _ui->comboBox_AATester_languageSelection->width(),
-                                                        _ui->comboBox_AATester_languageSelection->height());
-
-  _ui->label_AATester_title->setGeometry(0, 10, _ui->tab_AATester->width(), 27);
-  int textEditX = _ui->tab_AATester->width() / 4;
-  int textEditW = _ui->tab_AATester->width() / 2;
-  _ui->lineEdit_AATester_InputSentence->setGeometry(textEditX, _ui->lineEdit_AATester_InputSentence->y(),
-                                                    textEditW, _ui->lineEdit_AATester_InputSentence->height());
-  _ui->pushButton_micro->setGeometry(textEditX + textEditW + 10, _ui->pushButton_micro->y(),
-                                     _ui->pushButton_micro->width(), _ui->pushButton_micro->height());
-
-  _ui->tabWidget_AATester_Logs->setGeometry(10, _ui->tabWidget_AATester_Logs->y(), _ui->tab_AATester->width() - 20,
-                                            _ui->tab_AATester->height() - _ui->tabWidget_AATester_Logs->y() - 10);
-
-  _ui->comboBox_AATester_convertionToShow->setGeometry(_ui->tabWidget_AATester_Logs->width() - _ui->comboBox_AATester_convertionToShow->width() - 40,
-                                                       _ui->comboBox_AATester_convertionToShow->y(),
-                                                       _ui->comboBox_AATester_convertionToShow->width(),
-                                                       _ui->comboBox_AATester_convertionToShow->height());
-
-  onRescaleTokens();
-  onRescaleSynthGraph();
-  onRescaleSentiments();
-  onRescaleGenRep();
 }
 
 void MainWindow::onRescaleChatPanel()
@@ -776,109 +336,30 @@ void MainWindow::onRescaleChatDiagnosisPanel()
 }
 
 
-void MainWindow::onRescaleGenRep()
-{
-  _ui->textBrowser_genRep->setGeometry(10, 10, _ui->tab_AATester_Logs_GenRep->width() - 20,
-                                       _ui->tab_AATester_Logs_GenRep->height() - 20);
-}
-
-
-void MainWindow::onRescaleSentiments()
-{
-  _ui->textBrowser_AATester_Logs_Sentiments->setGeometry(10, 10, _ui->tab_AATester_Logs_Sentiments->width() - 20,
-                                                         _ui->tab_AATester_Logs_Sentiments->height() - 20);
-}
-
-
-
-void MainWindow::on_tabWidget_AATester_Logs_currentChanged(int index)
-{
-  switch (index)
-  {
-  case 0:
-    onRescaleTokens();
-    break;
-  case 1:
-    onRescaleSynthGraph();
-    break;
-
-  case 2:
-    onRescaleGenRep();
-    break;
-  case 4:
-    onRescaleSentiments();
-    break;
-  }
-}
-
-void MainWindow::on_pushButton_AATester_SwitchVersion_clicked()
-{
-  xSetSwitchVersionNewOrOld(!_newOrOldVersion);
-  _ui->lineEdit_AATester_InputSentence->setEnabled(_newOrOldVersion);
-  if (_newOrOldVersion)
-  {
-    on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-  }
-  else
-  {
-    std::string currText;
-    fSentenceLoader.getCurrSentence(currText);
-    _ui->lineEdit_AATester_InputSentence->setText
-        (QString::fromUtf8(currText.c_str()));
-    xDisplayOldResult();
-  }
-}
 
 void MainWindow::on_tabWidget_currentChanged(int index)
 {
   switch (index)
   {
   case 0:
-    onRescaleLinguisticAnalyzerPanel();
-    break;
-  case 1:
     onRescaleChatPanel();
     break;
-  case 2:
+  case 1:
     onRescaleChatDiagnosisPanel();
     break;
   }
 }
 
-void MainWindow::on_comboBox_AATester_endingStep_currentIndexChanged(int)
-{
-  on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-}
-
-void MainWindow::on_comboBox_AATester_languageSelection_currentIndexChanged(int index)
-{
-  on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-  _ui->textBrowser_AATester_Logs_Compare->setText("");
-  _updateCurrentLanguage(_getSelectedLanguageType());
-}
-
-void MainWindow::on_pushButton_MemoryClearer_RefreshPkg_clicked()
-{
-  _ui->textBrowser_MemoryClearer_DisplayPkg->setText
-      (QString::fromUtf8
-       (diagnosisPrinter::diagnosis({"loadedDatabases"}, SemanticMemory(), _lingDb).c_str()));
-}
 
 
 void MainWindow::on_texts_load_triggered()
 {
-  xSetSwitchVersionNewOrOld(true);
-  _ui->pushButton_AATester_SwitchVersion->setEnabled(false);
-
   SemanticLanguageEnum langType = _getSelectedLanguageType();
   const std::string textCorpusFolder = _corpusFolder.string() + "/input";
   if (langType == SemanticLanguageEnum::UNKNOWN)
     _loadSentences(true, textCorpusFolder);
   else
     _loadSentences(true, textCorpusFolder + "/" + semanticLanguageEnum_toLegacyStr(langType));
-
-  _ui->pushButton_AATester_PrevSentence->setEnabled(true);
-  _ui->pushButton_AATester_NextSentence->setEnabled(true);
 }
 
 
@@ -894,17 +375,6 @@ void MainWindow::_loadSentences
   std::string filename = fichier.toUtf8().constData();
   if (!filename.empty())
     fSentenceLoader.loadFile(filename);
-}
-
-void MainWindow::on_comboBox_AATester_convertionToShow_currentIndexChanged(int)
-{
-  on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-}
-
-
-void MainWindow::on_lineEdit_AATester_synthGraph_nbOfSteps_textChanged(const QString&)
-{
-  on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
 }
 
 
@@ -1430,18 +900,6 @@ void MainWindow::on_pushButton_clicked()
        (diagnosisPrinter::diagnosis({"memory", "memoryInformations"}, *_semMemoryPtr, _lingDb).c_str()));
 }
 
-void MainWindow::on_pushButton_addEquivalence_AATester_Logs_Reformulation_clicked()
-{
-  std::string inStr = _ui->lineEdit_AATester_InputSentence->text().toUtf8().constData();
-  auto equivalencesFilename = _getEquivalencesFilename();
-
-  std::map<std::string, std::string> equivalences;
-  equivalences.emplace(inStr, _currReformulationInSameLanguage);
-  _readEquivalences(equivalences, equivalencesFilename);
-  _writeEquivalences(equivalences, equivalencesFilename);
-  on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-}
-
 
 boost::filesystem::path MainWindow::_getEquivalencesFilename()
 {
@@ -1482,11 +940,6 @@ void MainWindow::_writeEquivalences(const std::map<std::string, std::string>& pE
   boost::property_tree::write_xml(pPath.string(), tree);
 }
 
-
-void MainWindow::on_lineEdit_AATester_tokenizer_nbOfSteps_textChanged(const QString &arg1)
-{
-  on_lineEdit_AATester_InputSentence_textChanged(_ui->lineEdit_AATester_InputSentence->text());
-}
 
 void MainWindow::on_actionLoad_chat_content_triggered()
 {
@@ -1558,23 +1011,6 @@ void MainWindow::on_actionload_a_smb_triggered()
   _clearLoadedScenarios();
   _semMemoryBinaryPtr->memBloc.loadBinaryFile(filenameStr);
   _semMemoryPtr->memBloc.subBlockPtr = &_semMemoryBinaryPtr->memBloc;
-}
-
-void MainWindow::on_pushButton_micro_clicked()
-{
-  if (_ui->pushButton_micro->text() == microStr)
-  {
-    _ui->pushButton_micro->setText(stopMicroStr);
-  }
-  else
-  {
-    bool textEnd = false;
-    auto asrText = _getAsrText(textEnd);
-    auto asrTextQString = QString::fromUtf8(asrText.c_str());
-    if (!asrText.empty() && _ui->lineEdit_AATester_InputSentence->text() != asrTextQString)
-      _ui->lineEdit_AATester_InputSentence->setText(asrTextQString);
-    _ui->pushButton_micro->setText(microStr);
-  }
 }
 
 

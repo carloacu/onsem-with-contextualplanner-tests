@@ -52,21 +52,11 @@ private Q_SLOTS:
   void on_actionLoad_memory_triggered();
 
   void on_actionLoad_chat_content_triggered();
-  void on_lineEdit_AATester_tokenizer_nbOfSteps_textChanged(const QString &arg1);
-  void on_pushButton_addEquivalence_AATester_Logs_Reformulation_clicked();
-  void on_lineEdit_AATester_InputSentence_textChanged(const QString &arg1);
-
-  void on_comboBox_tokenizer_endingStep_currentIndexChanged(int);
 
   void onRefresh();
   void onRescale();
-  void onRescaleLinguisticAnalyzerPanel();
   void onRescaleChatPanel();
   void onRescaleChatDiagnosisPanel();
-  void onRescaleTokens();
-  void onRescaleSynthGraph();
-  void onRescaleGenRep();
-  void onRescaleSentiments();
 
   /// Click on "prev sentence" button event.
   void on_pushButton_AATester_PrevSentence_clicked();
@@ -75,27 +65,9 @@ private Q_SLOTS:
   void on_pushButton_AATester_NextSentence_clicked();
 
 
-  void on_pushButton_AATester_Logs_Compare_OldXml_clicked();
-
-  void on_pushButton_AATester_Logs_Compare_NewXml_clicked();
-
-  void on_tabWidget_AATester_Logs_currentChanged(int index);
-
-  void on_pushButton_AATester_SwitchVersion_clicked();
-
   void on_tabWidget_currentChanged(int index);
 
-  void on_comboBox_AATester_endingStep_currentIndexChanged(int index);
-
-  void on_comboBox_AATester_languageSelection_currentIndexChanged(int index);
-
-  void on_pushButton_MemoryClearer_RefreshPkg_clicked();
-
   void on_texts_load_triggered();
-
-  void on_comboBox_AATester_convertionToShow_currentIndexChanged(int index);
-
-  void on_lineEdit_AATester_synthGraph_nbOfSteps_textChanged(const QString &arg1);
 
   void on_actionExport_to_ldic_triggered();
 
@@ -123,8 +95,6 @@ private Q_SLOTS:
   void on_pushButton_History_updateResults_clicked();
 
   void on_pushButton_clicked();
-
-  void on_pushButton_micro_clicked();
 
   void on_pushButton_history_microForChat_clicked();
 
@@ -182,40 +152,12 @@ private:
   bool _asrIsWaiting;
   bool _shouldWaitForNewSpeech;
 
-  /// The panel where we will see the tokens (this panel have a scrollbar)
-  onsem::ScrollPanel fTokensPanel;
-  /// List of tokens that we display
-  QList<QLabel*> fTokens;
-  /// List of initial grammatical possiblities.
-  QList<QComboBox*> fGramPossiblities;
-  /// List of final grammatical possiblities.
-  QList<QComboBox*> fFinalGramPossiblities;
-  /// List of final concepts.
-  QList<QComboBox*> fFinalConcepts;
-  /// List of final concepts.
-  QList<QComboBox*> fContextualInfos;
-  /// List of tagged tokens that we display
-  QList<QLabel*> fTaggedTokens;
-  /// List of tags possibilities for each tagged tokens.
-  QList<QComboBox*> fTokenTagsPossibilities;
   /// Display the dot image
-  bool fDispDotImage;
   onsem::SentencesLoader fSentenceLoader;
   std::map<QObject*, onsem::LineEditHistoricalWrapper> _lineEditHistorical;
 
-  std::string _getSelectedLanguageStr() const;
   onsem::SemanticLanguageEnum _getSelectedLanguageType();
   void _updateCurrentLanguage(onsem::SemanticLanguageEnum pNewLanguage);
-  void xSetSwitchVersionNewOrOld(bool pNewOrOld);
-  void xPrintDotImage(const std::string& pDotContent) const;
-
-  /// Clear the display of tokens.
-  void _clearPrintTokens();
-
-  /// Clear the display of tags.
-  void _clearPrintTags();
-
-  void xDisplayResult(const onsem::SyntacticAnalysisResultToDisplay& pAutoAnnotToDisplay);
 
   /// Refresh the syntactic graph image of the sentence.
   void _showImageInACanvas

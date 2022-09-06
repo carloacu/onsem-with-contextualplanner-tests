@@ -4,8 +4,6 @@ cmake_minimum_required(VERSION 2.8)
 # Avoid compile failed between boost "signals" and Qt "signals"
 add_definitions(-DQT_NO_KEYWORDS)
 
-add_subdirectory(guiutility)
-
 
 # Define Source files
 set(${PROJECT_NAME}_SRC
@@ -28,10 +26,6 @@ set(${PROJECT_NAME}_MOC
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-
-set(ONSEMGUIUTILITY_FOUND TRUE)
-set(ONSEMGUIUTILITY_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/guiutility/include")
-set(ONSEMGUIUTILITY_LIBRARIES "onsemguiutility")
 
 find_package(Qt5 COMPONENTS Core Widgets REQUIRED)
 
@@ -72,6 +66,9 @@ if(NOT ONSEMTESTER_FOUND)
 endif()
 if(NOT ONSEMWITHPLANNERTESTER_FOUND)
   find_package(onsemwithplannertester)
+endif()
+if(NOT ONSEMGUIUTILITY_FOUND)
+  find_package(onsemguiutility)
 endif()
 
 include_directories(
