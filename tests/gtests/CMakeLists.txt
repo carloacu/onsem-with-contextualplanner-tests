@@ -101,7 +101,9 @@ endif()
 if(NOT ONSEMTESTER_FOUND)
   find_package(onsemtester)
 endif()
-
+if(NOT ONSEMWITHPLANNERTESTER_FOUND)
+  find_package(onsemwithplannertester)
+endif()
 
 
 enable_testing()
@@ -121,6 +123,7 @@ include_directories(
   ${ONSEMSTREADATABASEACCESSOR_INCLUDE_DIRS}
   ${CONTEXTUALPLANNER_INCLUDE_DIRS}
   ${ONSEMTESTER_INCLUDE_DIRS}
+  ${ONSEMWITHPLANNERTESTER_INCLUDE_DIRS}
 )
 
 target_link_libraries(semanticreasoner_gtests
@@ -133,6 +136,7 @@ target_link_libraries(semanticreasoner_gtests
   ${ONSEMSTREADATABASEACCESSOR_LIBRARIES}
   ${CONTEXTUALPLANNER_LIBRARIES}
   ${ONSEMTESTER_LIBRARIES}
+  ${ONSEMWITHPLANNERTESTER_LIBRARIES}
 )
 target_compile_features(semanticreasoner_gtests PRIVATE cxx_std_14)
 

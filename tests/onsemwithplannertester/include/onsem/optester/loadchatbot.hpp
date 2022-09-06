@@ -1,5 +1,5 @@
-#ifndef ONSEM_SEMANTICTOTEXT_IO_LOADCHATBOT_HPP
-#define ONSEM_SEMANTICTOTEXT_IO_LOADCHATBOT_HPP
+#ifndef ONSEMWITHPLANNERTESTER_LOADCHATBOT_HPP
+#define ONSEMWITHPLANNERTESTER_LOADCHATBOT_HPP
 
 #include <istream>
 #include <contextualplanner/contextualplanner.hpp>
@@ -11,21 +11,21 @@ namespace onsem
 {
 const std::string beginOfActionId = "actionId-";
 
-struct ONSEMTESTER_API ChatbotParam
+struct ONSEMWITHPLANNERTESTER_API ChatbotParam
 {
   std::string text{};
   cp::SetOfFacts effect{};
   std::vector<cp::Goal> goalsToAdd{};
 };
 
-struct ONSEMTESTER_API ChatbotInput
+struct ONSEMWITHPLANNERTESTER_API ChatbotInput
 {
   cp::Fact fact{};
   cp::SetOfFacts effect{};
 };
 
 
-struct ONSEMTESTER_API ChatbotAction
+struct ONSEMWITHPLANNERTESTER_API ChatbotAction
 {
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
   std::string trigger{};
@@ -40,7 +40,7 @@ struct ONSEMTESTER_API ChatbotAction
   bool shouldBeDoneAsapWithoutHistoryCheck{};
 };
 
-struct ONSEMTESTER_API ChatbotDomain
+struct ONSEMWITHPLANNERTESTER_API ChatbotDomain
 {
   std::map<SemanticLanguageEnum, std::vector<std::string>> inform{};
   std::map<cp::ActionId, ChatbotAction> actions{};
@@ -48,25 +48,25 @@ struct ONSEMTESTER_API ChatbotDomain
 };
 
 
-struct ONSEMTESTER_API ChatbotProblem
+struct ONSEMWITHPLANNERTESTER_API ChatbotProblem
 {
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
   cp::Problem problem{};
 };
 
 
-ONSEMTESTER_API
+ONSEMWITHPLANNERTESTER_API
 void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
                        std::istream& pIstream);
 
 
-ONSEMTESTER_API
+ONSEMWITHPLANNERTESTER_API
 void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
                         std::istream& pIstream);
 
 
 
-ONSEMTESTER_API
+ONSEMWITHPLANNERTESTER_API
 void addChatbotDomaintoASemanticMemory(
     SemanticMemory& pSemanticMemory,
     ChatbotDomain& pChatbotDomain,
@@ -75,4 +75,4 @@ void addChatbotDomaintoASemanticMemory(
 
 } // End of namespace onsem
 
-#endif // ONSEM_SEMANTICTOTEXT_IO_LOADCHATBOT_HPP
+#endif // ONSEMWITHPLANNERTESTER_LOADCHATBOT_HPP

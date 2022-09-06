@@ -31,7 +31,6 @@
 #include <onsem/semanticdebugger/dotsaver.hpp>
 #include <onsem/semanticdebugger/syntacticgraphresult.hpp>
 #include <onsem/semanticdebugger/diagnosisprinter.hpp>
-#include <onsem/tester/loadchatbot.hpp>
 #include <onsem/tester/reactOnTexts.hpp>
 #include <onsem/tester/syntacticanalysisxmlsaver.hpp>
 

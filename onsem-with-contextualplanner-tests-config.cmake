@@ -3,4 +3,4 @@ get_filename_component(_onsem_contextualplanner_tests_root "${onsem_contextualpl
 
 include(${_onsem_contextualplanner_tests_root}/contextualplanner/contextualplanner-config.cmake)
 include(${_onsem_contextualplanner_tests_root}/onsem/onsem-config.cmake)
-include(${_onsem_contextualplanner_tests_root}/tests/onsemtester/onsemtester-config.cmake)
+include(${_onsem_contextualplanner_tests_root}/tests/onsemwithplannertester/onsemwithplannertester-config.cmake)

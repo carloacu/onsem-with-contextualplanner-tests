@@ -16,7 +16,7 @@
 #include <onsem/tester/sentencesloader.hpp>
 #include <onsem/tester/scenariocontainer.hpp>
 #include <contextualplanner/contextualplanner.hpp>
-#include <onsem/tester/loadchatbot.hpp>
+#include <onsem/optester/loadchatbot.hpp>
 #include "qobject/scrollpanel.hpp"
 
 using namespace onsem;
