@@ -134,7 +134,7 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
     else if (currChatbotAttr.first == "facts")
     {
       for (auto& currFactTree : currChatbotAttr.second)
-        pChatbotProblem.problem.addFact(cp::Fact::fromStr(currFactTree.second.get_value<std::string>()));
+        pChatbotProblem.problem.addFact(cp::Fact::fromStr(currFactTree.second.get_value<std::string>()), now);
     }
     else if (currChatbotAttr.first == "goals")
     {

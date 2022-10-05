@@ -467,12 +467,12 @@ std::string MainWindow::_operator_react(
     pTextLanguage = semMemory.defaultLanguage;
   mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
   if (_effectAfterCurrentInput && _chatbotProblem)
-    _chatbotProblem->problem.modifyFacts(*_effectAfterCurrentInput);
+    _chatbotProblem->problem.modifyFacts(*_effectAfterCurrentInput, now);
   if (paramSelectedPtr != nullptr && _chatbotProblem)
   {
     if (!paramSelectedPtr->goalsToAdd.empty())
       _chatbotProblem->problem.addGoals(paramSelectedPtr->goalsToAdd, now);
-    _chatbotProblem->problem.modifyFacts(paramSelectedPtr->effect);
+    _chatbotProblem->problem.modifyFacts(paramSelectedPtr->effect, now);
   }
   else
   {
@@ -821,6 +821,7 @@ void MainWindow::_clearLoadedScenarios()
   {
     if (_chatbotProblem && pMemorySentencePtr != nullptr)
     {
+      auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
       auto textProcToRobot = TextProcessingContext::getTextProcessingContextToRobot(SemanticLanguageEnum::FRENCH);
       auto textProcFromRobot = TextProcessingContext::getTextProcessingContextFromRobot(SemanticLanguageEnum::FRENCH);
       auto behaviorDef = SemanticMemoryBlock::extractActionFromMemorySentence(*pMemorySentencePtr);
@@ -835,7 +836,7 @@ void MainWindow::_clearLoadedScenarios()
       converter::semExpToText(varToValue["comportement_appris_resultat"], converter::getFutureIndicativeAssociatedForm(std::move(behaviorDef.composition)),
                               textProcFromRobot, false, semMemory, _lingDb, nullptr);
       _chatbotProblem->problem.addVariablesToValue(varToValue);
-      _chatbotProblem->problem.addFact(cp::Fact("robot_learnt_a_behavior"));
+      _chatbotProblem->problem.addFact(cp::Fact("robot_learnt_a_behavior"), now);
     }
   });
 
