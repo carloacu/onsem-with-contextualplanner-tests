@@ -52,5 +52,5 @@ target_link_libraries(onsemwithplannertester
   ${ONSEMSEMANTOCDEBUGGER_LIBRARIES}
   ${CONTEXTUALPLANNER_LIBRARIES}
 )
-target_compile_features(onsemwithplannertester PRIVATE cxx_std_14)
+target_compile_features(onsemwithplannertester PRIVATE cxx_std_17)
 

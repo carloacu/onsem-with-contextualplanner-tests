@@ -66,7 +66,7 @@ target_link_libraries(onsemwithplannergtests
   ${ONSEMTESTER_LIBRARIES}
   ${ONSEMWITHPLANNERTESTER_LIBRARIES}
 )
-target_compile_features(onsemwithplannergtests PRIVATE cxx_std_14)
+target_compile_features(onsemwithplannergtests PRIVATE cxx_std_17)
 
 
 add_test(
