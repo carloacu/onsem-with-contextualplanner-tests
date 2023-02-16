@@ -1,10 +1,10 @@
 #include <onsem/optester/loadchatbot.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
-#include <onsem/common/utility/make_unique.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/fixedsynthesisexpression.hpp>
 #include <onsem/semantictotext/semanticconverter.hpp>
 #include <onsem/semantictotext/semexpoperators.hpp>
+#include <onsem/semantictotext/triggers.hpp>
 
 namespace onsem
 {
@@ -88,7 +88,7 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
         auto inputTreeOpt = currActionTree.second.get_child_optional("input");
         if (inputTreeOpt)
         {
-          currChatbotAction.inputPtr = mystd::make_unique<ChatbotInput>();
+          currChatbotAction.inputPtr = std::make_unique<ChatbotInput>();
           currChatbotAction.inputPtr->fact = inputTreeOpt->get("fact", "");
           currChatbotAction.inputPtr->effect = cp::SetOfFacts::fromStr(inputTreeOpt->get("effect", ""), ',');
         }
@@ -172,27 +172,27 @@ void addChatbotDomaintoASemanticMemory(
 
       auto textProcFromRobot = TextProcessingContext::getTextProcessingContextFromRobot(currAction.language);
       const std::list<std::string> references{1, beginOfActionId + currActionWithId.first};
-      auto semExpWithFiexedSynthesis = mystd::make_unique<FixedSynthesisExpression>(
+      auto semExpWithFiexedSynthesis = std::make_unique<FixedSynthesisExpression>(
             converter::textToContextualSemExp(currAction.text, textProcFromRobot, SemanticSourceEnum::UNKNOWN, pLingDb, &references));
       semExpWithFiexedSynthesis->langToSynthesis.emplace(currAction.language, currAction.text);
 
       memoryOperation::resolveAgentAccordingToTheContext(triggerSemExp, pSemanticMemory, pLingDb);
-      memoryOperation::addATrigger(std::move(triggerSemExp),
-                                   std::move(semExpWithFiexedSynthesis),
-                                   pSemanticMemory, pLingDb);
+      triggers::add(std::move(triggerSemExp),
+                    std::move(semExpWithFiexedSynthesis),
+                    pSemanticMemory, pLingDb);
     }
 
     cp::Action action(currAction.precondition, currAction.effect,
                       currAction.preferInContext);
     action.effect.add(currAction.potentialEffect);
-    action.shouldBeDoneAsapWithoutHistoryCheck = currAction.shouldBeDoneAsapWithoutHistoryCheck;
+    //action.shouldBeDoneAsapWithoutHistoryCheck = currAction.shouldBeDoneAsapWithoutHistoryCheck;
     for (const auto& currParam : currAction.parameters)
       action.effect.add(currParam.effect);
     if (currAction.inputPtr)
       action.effect.add(currAction.inputPtr->effect);
     actions.emplace(currActionWithId.first, std::move(action));
   }
-  pChatbotDomain.compiledDomain = mystd::make_unique<cp::Domain>(actions);
+  pChatbotDomain.compiledDomain = std::make_unique<cp::Domain>(actions);
 }
 
 

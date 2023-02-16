@@ -3,7 +3,7 @@
 
 #include <istream>
 #include <contextualplanner/contextualplanner.hpp>
-#include <onsem/common/enum/semanticlanguagetype.hpp>
+#include <onsem/common/enum/semanticlanguageenum.hpp>
 #include <onsem/semantictotext/semanticmemory/semanticmemory.hpp>
 #include "api.hpp"
 
@@ -20,7 +20,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotParam
 
 struct ONSEMWITHPLANNERTESTER_API ChatbotInput
 {
-  cp::Fact fact{};
+  cp::Fact fact{""};
   cp::SetOfFacts effect{};
 };
 

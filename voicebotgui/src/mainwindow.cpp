@@ -9,7 +9,6 @@
 #include <QKeyEvent>
 #include <QFileDialog>
 #include "ui_mainwindow.h"
-#include <boost/filesystem/fstream.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -52,11 +51,11 @@ const std::string _tmpFolder = ".";
 
 using namespace onsem;
 
-MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
-                       const boost::filesystem::path& pCorpusResultsFolder,
-                       const boost::filesystem::path& pInputScenariosFolder,
-                       const boost::filesystem::path& pOutputScenariosFolder,
-                       const boost::filesystem::path& pCorpusFolder,
+MainWindow::MainWindow(const std::filesystem::path& pCorpusEquivalencesFolder,
+                       const std::filesystem::path& pCorpusResultsFolder,
+                       const std::filesystem::path& pInputScenariosFolder,
+                       const std::filesystem::path& pOutputScenariosFolder,
+                       const std::filesystem::path& pCorpusFolder,
                        linguistics::LinguisticDatabaseStreams& pIStreams,
                        QWidget *parent) :
   QMainWindow(parent),
@@ -73,8 +72,8 @@ MainWindow::MainWindow(const boost::filesystem::path& pCorpusEquivalencesFolder,
   _currReformulationInSameLanguage(),
   fLangToTokenizerSteps(),
   _newOrOldVersion(true),
-  _semMemoryPtr(mystd::make_unique<SemanticMemory>()),
-  _semMemoryBinaryPtr(mystd::make_unique<SemanticMemory>()),
+  _semMemoryPtr(std::make_unique<SemanticMemory>()),
+  _semMemoryBinaryPtr(std::make_unique<SemanticMemory>()),
   _infActionAddedConnection(),
   _chatbotDomain(),
   _chatbotProblem(),
@@ -634,7 +633,7 @@ void MainWindow::_printParametersAndNotifyPlanner(const ChatbotAction& pAction,
     actionParam.goalsToAdd = currParameter.goalsToAdd;
   }
   if (pAction.inputPtr)
-    _effectAfterCurrentInput = mystd::make_unique<cp::SetOfFacts>(pAction.inputPtr->effect);
+    _effectAfterCurrentInput = std::make_unique<cp::SetOfFacts>(pAction.inputPtr->effect);
   if (!paramLines.empty())
   {
     _ui->textBrowser_chat_history->setTextColor(_outFontColor);
@@ -817,14 +816,14 @@ void MainWindow::_clearLoadedScenarios()
 
   _infActionAddedConnection.disconnect();
   _infActionAddedConnection =
-      semMemory.memBloc.infActionAdded.connectUnsafe([&](intSemId, const SemanticMemorySentence* pMemorySentencePtr)
+      semMemory.memBloc.infActionAdded.connectUnsafe([&](intSemId, const GroundedExpWithLinks* pGroundedExpWithLinksPtr)
   {
-    if (_chatbotProblem && pMemorySentencePtr != nullptr)
+    if (_chatbotProblem && pGroundedExpWithLinksPtr != nullptr)
     {
       auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
       auto textProcToRobot = TextProcessingContext::getTextProcessingContextToRobot(SemanticLanguageEnum::FRENCH);
       auto textProcFromRobot = TextProcessingContext::getTextProcessingContextFromRobot(SemanticLanguageEnum::FRENCH);
-      auto behaviorDef = SemanticMemoryBlock::extractActionFromMemorySentence(*pMemorySentencePtr);
+      auto behaviorDef = SemanticMemoryBlock::extractActionFromMemorySentence(*pGroundedExpWithLinksPtr);
       UniqueSemanticExpression formulation1;
       UniqueSemanticExpression formulation2;
       converter::getInfinitiveToTwoDifferentPossibleWayToAskForIt(formulation1, formulation2, std::move(behaviorDef.label));
@@ -835,7 +834,7 @@ void MainWindow::_clearLoadedScenarios()
                               textProcToRobot, false, semMemory, _lingDb, nullptr);
       converter::semExpToText(varToValue["comportement_appris_resultat"], converter::getFutureIndicativeAssociatedForm(std::move(behaviorDef.composition)),
                               textProcFromRobot, false, semMemory, _lingDb, nullptr);
-      _chatbotProblem->problem.addVariablesToValue(varToValue);
+      _chatbotProblem->problem.addVariablesToValue(varToValue, now);
       _chatbotProblem->problem.addFact(cp::Fact("robot_learnt_a_behavior"), now);
     }
   });
@@ -902,15 +901,15 @@ void MainWindow::on_pushButton_clicked()
 }
 
 
-boost::filesystem::path MainWindow::_getEquivalencesFilename()
+std::filesystem::path MainWindow::_getEquivalencesFilename()
 {
   std::string languageStr = semanticLanguageEnum_toLegacyStr(_currentLanguage);
   return _corpusEquivalencesFolder /
-      boost::filesystem::path(languageStr + "_equivalences.xml");
+      std::filesystem::path(languageStr + "_equivalences.xml");
 }
 
 void MainWindow::_readEquivalences(std::map<std::string, std::string>& pEquivalences,
-                                   const boost::filesystem::path& pPath)
+                                   const std::filesystem::path& pPath)
 {
   try
   {
@@ -927,7 +926,7 @@ void MainWindow::_readEquivalences(std::map<std::string, std::string>& pEquivale
 }
 
 void MainWindow::_writeEquivalences(const std::map<std::string, std::string>& pEquivalences,
-                                    const boost::filesystem::path& pPath)
+                                    const std::filesystem::path& pPath)
 {
   boost::property_tree::ptree tree;
   boost::property_tree::ptree& resultsTree = tree.add_child("equivalences", {});
@@ -1112,11 +1111,11 @@ void MainWindow::on_actionAdd_domain_triggered()
     return;
   std::ifstream file(filenameStr.c_str(), std::ifstream::in);
   if (!_chatbotDomain)
-    _chatbotDomain = mystd::make_unique<ChatbotDomain>();
+    _chatbotDomain = std::make_unique<ChatbotDomain>();
   loadChatbotDomain(*_chatbotDomain, file);
   addChatbotDomaintoASemanticMemory(*_semMemoryPtr, *_chatbotDomain, _lingDb);
   if (!_chatbotProblem)
-    _chatbotProblem = mystd::make_unique<ChatbotProblem>();
+    _chatbotProblem = std::make_unique<ChatbotProblem>();
   _proactivelyAskThePlanner(now);
 }
 
@@ -1133,7 +1132,7 @@ void MainWindow::on_actionSet_problem_triggered()
   if (filenameStr.empty())
     return;
   std::ifstream file(filenameStr.c_str(), std::ifstream::in);
-  _chatbotProblem = mystd::make_unique<ChatbotProblem>();
+  _chatbotProblem = std::make_unique<ChatbotProblem>();
   loadChatbotProblem(*_chatbotProblem, file);
   _proactivelyAskThePlanner(now);
 }
