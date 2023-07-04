@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
         shareSemantic = argv[i + 1];
     }
   }
-  static const std::string exOfCommandLine = "--databases ../linguistic/databases --share_semantic ../../share/semantic";
+  static const std::string exOfCommandLine = "--databases ../onsem/linguistic/databases --share_semantic ../../onsem/share/semantic";
   if (lingDbPath.empty())
     throw std::runtime_error("--databases option is missing (ex: " + exOfCommandLine + ")");
   if (shareSemantic.empty())
