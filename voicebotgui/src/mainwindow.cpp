@@ -9,8 +9,6 @@
 #include <QKeyEvent>
 #include <QFileDialog>
 #include "ui_mainwindow.h"
-#include <boost/lexical_cast.hpp>
-#include <boost/algorithm/string.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <contextualplanner/util/replacevariables.hpp>
 #include <onsem/common/utility/string.hpp>
@@ -656,7 +654,7 @@ void MainWindow::_sayText(std::list<TextWithLanguage>& pTextsToSay)
   std::size_t i = 0;
   for (auto& currTextToSay : pTextsToSay)
   {
-    boost::replace_all(currTextToSay.text, "\"", "\\\"");
+    mystd::replace_all(currTextToSay.text, "\"", "\\\"");
     const std::string languageCode = currTextToSay.language == SemanticLanguageEnum::FRENCH ? "fr" : "en";
     std::stringstream ssOutSoundFilename;
     ssOutSoundFilename << "out_tts_" << i << ".mp3";
