@@ -103,6 +103,7 @@ private Q_SLOTS:
   void on_actionSet_problem_triggered();
 
 private:
+  /*
   struct ChatbotSemExpParam
   {
     std::string urlizeInput{};
@@ -111,6 +112,7 @@ private:
     cp::SetOfFacts effect{};
     std::vector<cp::Goal> goalsToAdd{};
   };
+  */
   struct TextWithLanguage
   {
     TextWithLanguage(const std::string& pText,
@@ -141,8 +143,8 @@ private:
   mystd::observable::Connection _infActionAddedConnection;
   std::unique_ptr<onsem::ChatbotDomain> _chatbotDomain;
   std::unique_ptr<onsem::ChatbotProblem> _chatbotProblem;
-  std::list<ChatbotSemExpParam> _currentActionParameters;
-  std::unique_ptr<cp::SetOfFacts> _effectAfterCurrentInput;
+  //std::list<ChatbotSemExpParam> _currentActionParameters;
+  //std::unique_ptr<cp::SetOfFacts> _effectAfterCurrentInput;
   ScenarioContainer _scenarioContainer;
   const std::string _inLabel;
   QColor _outFontColor;
@@ -180,9 +182,7 @@ private:
   void _proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
                                std::set<std::string>& pActionIdsToSkip,
                                const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
-  void _printParametersAndNotifyPlanner(const ChatbotAction& pAction,
-                                        const std::string& pActionId,
-                                        const std::map<std::string, std::string>& pParameters,
+  void _printParametersAndNotifyPlanner(const cp::OneStepOfPlannerResult& pOneStepOfPlannerResult,
                                         const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _printChatRobotMessage(const std::string& pText);
   void _sayText(std::list<TextWithLanguage>& pTextsToSay);
@@ -197,6 +197,7 @@ private:
                           const std::filesystem::path &pPath);
 
   std::string _getAsrText(bool& pTextEnd);
+  void _printGoalsAndFacts();
   void _proactivelyAskThePlanner(const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
 };
 

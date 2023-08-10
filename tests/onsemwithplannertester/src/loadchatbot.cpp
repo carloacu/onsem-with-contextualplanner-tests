@@ -1,6 +1,7 @@
 #include <onsem/optester/loadchatbot.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <contextualplanner/types/factcondition.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/fixedsynthesisexpression.hpp>
 #include <onsem/semantictotext/semanticconverter.hpp>
 #include <onsem/semantictotext/semexpoperators.hpp>
@@ -10,13 +11,18 @@ namespace onsem
 {
 namespace
 {
-std::size_t nextId = 0;
 
-std::string newId(const std::map<cp::ActionId, ChatbotAction>& pActions) {
+std::string newId(
+    const std::string& pBaseName,
+    const std::map<cp::ActionId, ChatbotAction>& pActions) {
+  if (pActions.count(pBaseName) == 0)
+    return pBaseName;
+
+  std::size_t nextId = 1;
   while (true)
   {
     std::stringstream ss;
-    ss << nextId++;
+    ss << pBaseName << nextId++;
     std::string res;
     res = ss.str();
     if (pActions.count(res) == 0)
@@ -59,51 +65,48 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
       for (auto& currActionTree : currChatbotAttr.second)
       {
         cp::ActionId actionId = currActionTree.second.get("id", "");
+        std::string actionText = currActionTree.second.get("text", "");
         if (actionId.empty())
-          actionId = newId(pChatbotDomain.actions);
+          actionId = actionText;
+        actionId = newId(actionId, pChatbotDomain.actions);
         auto& currChatbotAction = pChatbotDomain.actions[actionId];
         currChatbotAction.language = language;
 
         currChatbotAction.trigger = currActionTree.second.get("trigger", "");
-        currChatbotAction.text = currActionTree.second.get("text", "");
+        currChatbotAction.text = actionText;
 
         auto parametersTreeOpt = currActionTree.second.get_child_optional("parameters");
         if (parametersTreeOpt)
         {
-          for (auto& currParameterTree : *parametersTreeOpt)
+          for (auto& currParametersTree : *parametersTreeOpt)
           {
             currChatbotAction.parameters.emplace_back();
             auto& currParam = currChatbotAction.parameters.back();
-            currParam.text = currParameterTree.second.get("text", "");
-            currParam.effect = cp::SetOfFacts::fromStr(currParameterTree.second.get("effect", ""), ',');
-
-            auto goalsToAddTreeOpt = currParameterTree.second.get_child_optional("goalsToAdd");
-            if (goalsToAddTreeOpt)
-              for (auto& currGoalTree : *goalsToAddTreeOpt)
-                currParam.goalsToAdd.push_back(currGoalTree.second.get_value<std::string>());
+            bool ifrstIteration = true;
+            for (auto& currParameterTree : currParametersTree.second)
+            {
+              if (ifrstIteration)
+              {
+                ifrstIteration = false;
+                currParam.text = currParameterTree.second.get_value<std::string>();
+              }
+              else
+              {
+                currParam.question = currParameterTree.second.get_value<std::string>();
+              }
+            }
           }
         }
 
-
-        auto inputTreeOpt = currActionTree.second.get_child_optional("input");
-        if (inputTreeOpt)
-        {
-          currChatbotAction.inputPtr = std::make_unique<ChatbotInput>();
-          currChatbotAction.inputPtr->fact = inputTreeOpt->get("fact", "");
-          currChatbotAction.inputPtr->effect = cp::SetOfFacts::fromStr(inputTreeOpt->get("effect", ""), ',');
-        }
-
-        currChatbotAction.precondition = cp::SetOfFacts::fromStr(currActionTree.second.get("precondition", ""), ',');
-        currChatbotAction.preferInContext = cp::SetOfFacts::fromStr(currActionTree.second.get("preferInContext", ""), ',');
-        currChatbotAction.effect = cp::SetOfFacts::fromStr(currActionTree.second.get("effect", ""), ',');
-        currChatbotAction.potentialEffect = cp::SetOfFacts::fromStr(currActionTree.second.get("potentialEffect", ""), ',');
-        currChatbotAction.shouldBeDoneAsapWithoutHistoryCheck = currActionTree.second.get("shouldBeDoneAsapWithoutHistoryCheck", false);
+        currChatbotAction.precondition = cp::FactCondition::fromStr(currActionTree.second.get("precondition", ""));
+        currChatbotAction.preferInContext = cp::FactCondition::fromStr(currActionTree.second.get("preferInContext", ""));
+        currChatbotAction.effect = cp::FactModification::fromStr(currActionTree.second.get("effect", ""));
+        currChatbotAction.potentialEffect = cp::FactModification::fromStr(currActionTree.second.get("potentialEffect", ""));
 
         auto goalsToAddTreeOpt = currActionTree.second.get_child_optional("goalsToAdd");
         if (goalsToAddTreeOpt)
           for (auto& currGoalTree : *goalsToAddTreeOpt)
             currChatbotAction.goalsToAdd.push_back(currGoalTree.second.get_value<std::string>());
-
       }
     }
   }
@@ -164,7 +167,7 @@ void addChatbotDomaintoASemanticMemory(
   std::map<cp::ActionId, cp::Action> actions;
   for (const auto& currActionWithId : pChatbotDomain.actions)
   {
-    auto& currAction = currActionWithId.second;
+    const ChatbotAction& currAction = currActionWithId.second;
     if (!currAction.trigger.empty())
     {
       auto textProcToRobot = TextProcessingContext::getTextProcessingContextToRobot(currAction.language);
@@ -182,14 +185,13 @@ void addChatbotDomaintoASemanticMemory(
                     pSemanticMemory, pLingDb);
     }
 
-    cp::Action action(currAction.precondition, currAction.effect,
-                      currAction.preferInContext);
-    action.effect.add(currAction.potentialEffect);
-    //action.shouldBeDoneAsapWithoutHistoryCheck = currAction.shouldBeDoneAsapWithoutHistoryCheck;
-    for (const auto& currParam : currAction.parameters)
-      action.effect.add(currParam.effect);
-    if (currAction.inputPtr)
-      action.effect.add(currAction.inputPtr->effect);
+    cp::Action action(currAction.precondition ? currAction.precondition->clone() : std::unique_ptr<cp::FactCondition>(),
+                      currAction.effect ? currAction.effect->clone(nullptr) : std::unique_ptr<cp::FactModification>(),
+                      currAction.preferInContext ? currAction.preferInContext->clone() : std::unique_ptr<cp::FactCondition>());
+    for (auto& currParam : currAction.parameters)
+      action.parameters.emplace_back(currParam.text);
+    if (currAction.potentialEffect)
+      action.effect.potentialFactsModifications = currAction.potentialEffect->clone(nullptr);
     actions.emplace(currActionWithId.first, std::move(action));
   }
   pChatbotDomain.compiledDomain = std::make_unique<cp::Domain>(actions);

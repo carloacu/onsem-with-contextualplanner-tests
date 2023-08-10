@@ -14,14 +14,7 @@ const std::string beginOfActionId = "actionId-";
 struct ONSEMWITHPLANNERTESTER_API ChatbotParam
 {
   std::string text{};
-  cp::SetOfFacts effect{};
-  std::vector<cp::Goal> goalsToAdd{};
-};
-
-struct ONSEMWITHPLANNERTESTER_API ChatbotInput
-{
-  cp::Fact fact{""};
-  cp::SetOfFacts effect{};
+  std::string question{};
 };
 
 
@@ -31,13 +24,11 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotAction
   std::string trigger{};
   std::string text{};
   std::vector<ChatbotParam> parameters{};
-  std::unique_ptr<ChatbotInput> inputPtr{};
-  cp::SetOfFacts precondition{};
-  cp::SetOfFacts preferInContext{};
-  cp::SetOfFacts effect{};
-  cp::SetOfFacts potentialEffect{};
+  std::unique_ptr<cp::FactCondition> precondition{};
+  std::unique_ptr<cp::FactCondition> preferInContext{};
+  std::unique_ptr<cp::FactModification> effect{};
+  std::unique_ptr<cp::FactModification> potentialEffect{};
   std::vector<cp::Goal> goalsToAdd{};
-  bool shouldBeDoneAsapWithoutHistoryCheck{};
 };
 
 struct ONSEMWITHPLANNERTESTER_API ChatbotDomain

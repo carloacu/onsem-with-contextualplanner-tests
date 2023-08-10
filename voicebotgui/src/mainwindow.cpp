@@ -74,8 +74,6 @@ MainWindow::MainWindow(const std::filesystem::path& pCorpusEquivalencesFolder,
   _infActionAddedConnection(),
   _chatbotDomain(),
   _chatbotProblem(),
-  _currentActionParameters(),
-  _effectAfterCurrentInput(),
   _scenarioContainer(),
   _inLabel("in:"),
   _outFontColor("grey"),
@@ -310,11 +308,24 @@ void MainWindow::onRescaleChatPanel()
   {
     int mainFrameY = 90;
     int asrFrameY = _ui->tab_Chat->height() - _bottomBoxHeight - 10;
+    int goalsHeight = 300;
+    int goalsWidth = 300;
 
-    _ui->textBrowser_chat_history->setGeometry(10, mainFrameY,
-                                               _ui->tab_Chat->width() - 20, asrFrameY - mainFrameY - 20);
+    _ui->textBrowser_chat_history->setGeometry(10,
+                                               mainFrameY,
+                                               _ui->tab_Chat->width() - 20 - goalsWidth,
+                                               asrFrameY - mainFrameY - 20);
+
+    _ui->textBrowser_goals->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+                                        mainFrameY,
+                                        goalsWidth,
+                                        goalsHeight);
+
+    _ui->textBrowser_facts->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+                                        mainFrameY + goalsHeight,
+                                        goalsWidth,
+                                        asrFrameY - mainFrameY - 20  - goalsHeight);
   }
-
 
   // speech frame
   _ui->frame_history_asr->setGeometry(10, asrFrameY, _ui->tab_Chat->width() - 20, _bottomBoxHeight);
@@ -435,45 +446,12 @@ std::string MainWindow::_operator_react(
       converter::textToContextualSemExp(pText, inContext,
                                         SemanticSourceEnum::ASR, _lingDb);
 
-  auto urlizeInput = mystd::urlizeText(pText);
-  const ChatbotSemExpParam* paramSelectedPtr = nullptr;
-  for (const auto& currParam : _currentActionParameters)
-  {
-    if (urlizeInput == currParam.urlizeInput ||
-        SemExpComparator::getSemExpsImbrications(*semExp, *currParam.semExp, semMemory.memBloc, _lingDb, nullptr) != ImbricationType::DIFFERS)
-    {
-      paramSelectedPtr = &currParam;
-      break;
-    }
-  }
   memoryOperation::mergeWithContext(semExp, semMemory, _lingDb);
-  if (paramSelectedPtr == nullptr)
-  {
-    for (const auto& currParam : _currentActionParameters)
-    {
-      if (SemExpComparator::getSemExpsImbrications(*semExp, *currParam.semExpMergedWithContext, semMemory.memBloc, _lingDb, nullptr) != ImbricationType::DIFFERS)
-      {
-        paramSelectedPtr = &currParam;
-        break;
-      }
-    }
-  }
 
   if (pTextLanguage == SemanticLanguageEnum::UNKNOWN)
     pTextLanguage = semMemory.defaultLanguage;
   mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
-  if (_effectAfterCurrentInput && _chatbotProblem)
-    _chatbotProblem->problem.modifyFacts(*_effectAfterCurrentInput, now);
-  if (paramSelectedPtr != nullptr && _chatbotProblem)
-  {
-    if (!paramSelectedPtr->goalsToAdd.empty())
-      _chatbotProblem->problem.addGoals(paramSelectedPtr->goalsToAdd, now);
-    _chatbotProblem->problem.modifyFacts(paramSelectedPtr->effect, now);
-  }
-  else
-  {
-    memoryOperation::react(reaction, semMemory, std::move(semExp), _lingDb, nullptr);
-  }
+  memoryOperation::react(reaction, semMemory, std::move(semExp), _lingDb, nullptr);
   if (!reaction)
     return "";
   pContextualAnnotation = SemExpGetter::extractContextualAnnotation(**reaction);
@@ -483,10 +461,9 @@ std::string MainWindow::_operator_react(
                                    SemanticAgentGrounding::currentUser,
                                    pTextLanguage);
   OutputterContext outputterContext(outContext);
-  std::string res;
   ExecutionDataOutputter executionDataOutputter(semMemory, _lingDb);
   executionDataOutputter.processSemExp(**reaction, outputterContext);
-  return res;
+  return executionDataOutputter.rootExecutionData.run(semMemory, _lingDb);
 }
 
 
@@ -502,53 +479,58 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
   hWrapper.addNewText(pText, true);
   hWrapper.goToEndOfHistorical();
 
-  auto textLanguage = SemanticLanguageEnum::UNKNOWN;
-  auto contextualAnnotation = ContextualAnnotation::ANSWER;
   std::list<TextWithLanguage> textsToSay;
-  std::list<std::string> references;
-  auto text =
-      _operator_react(contextualAnnotation, references, pText, textLanguage);
-  bool actinHasBeenPrinted = false;
-  if (!text.empty())
+  if (!pText.empty() && pText[0] == '+')
   {
-    _printChatRobotMessage(text);
-    textsToSay.emplace_back(text, textLanguage);
+    _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr(pText.substr(1, pText.size() - 1)), pNow);
+    std::set<std::string> actionIdsToSkip;
+    _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
+  }
+  else
+  {
+    auto textLanguage = SemanticLanguageEnum::UNKNOWN;
+    auto contextualAnnotation = ContextualAnnotation::ANSWER;
 
-    for (const auto& currRef : references)
+    std::list<std::string> references;
+    auto text =
+        _operator_react(contextualAnnotation, references, pText, textLanguage);
+    bool actinHasBeenPrinted = false;
+    if (!text.empty())
     {
-      auto beginOfActionIdSize = beginOfActionId.size();
-      if (currRef.compare(0, beginOfActionIdSize, beginOfActionId) == 0)
+      _printChatRobotMessage(text);
+      textsToSay.emplace_back(text, textLanguage);
+
+      /*
+      for (const auto& currRef : references)
       {
-        auto actionId = currRef.substr(beginOfActionIdSize, currRef.size() - beginOfActionIdSize);
-        if (!actionId.empty())
+        auto beginOfActionIdSize = beginOfActionId.size();
+        if (currRef.compare(0, beginOfActionIdSize, beginOfActionId) == 0)
         {
-          auto itAction = _chatbotDomain->actions.find(actionId);
-          if (itAction != _chatbotDomain->actions.end())
+          auto actionId = currRef.substr(beginOfActionIdSize, currRef.size() - beginOfActionIdSize);
+          if (!actionId.empty())
           {
-            auto& action = itAction->second;
-            _currentActionParameters.clear();
-            _effectAfterCurrentInput.reset();
-            std::map<std::string, std::string> parameters;
-            _printParametersAndNotifyPlanner(action, actionId, parameters, pNow);
-            actinHasBeenPrinted = true;
-            break;
+            auto itAction = _chatbotDomain->actions.find(actionId);
+            if (itAction != _chatbotDomain->actions.end())
+            {
+              auto& action = itAction->second;
+              std::map<std::string, std::string> parameters;
+              _printParametersAndNotifyPlanner(action, actionId, parameters, pNow);
+              actinHasBeenPrinted = true;
+              break;
+            }
           }
         }
       }
+      */
     }
-  }
 
-  if (!actinHasBeenPrinted)
-  {
-    if (contextualAnnotation != ContextualAnnotation::QUESTION)
+    if (!actinHasBeenPrinted)
     {
-      std::set<std::string> actionIdsToSkip;
-      _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
-    }
-    else
-    {
-      _currentActionParameters.clear();
-      _effectAfterCurrentInput.reset();
+      if (contextualAnnotation != ContextualAnnotation::QUESTION)
+      {
+        std::set<std::string> actionIdsToSkip;
+        _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
+      }
     }
   }
 
@@ -561,53 +543,59 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
                                          std::set<std::string>& pActionIdsToSkip,
                                          const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
-  std::string textToSay;
-  _currentActionParameters.clear();
-  _effectAfterCurrentInput.reset();
   if (_chatbotDomain && _chatbotProblem)
   {
-    std::map<std::string, std::string> parameters;
-    auto actionId = cp::lookForAnActionToDo(parameters, _chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, nullptr, nullptr, &_chatbotProblem->problem.historical);
-    if (!actionId.empty() && pActionIdsToSkip.count(actionId) == 0)
+    auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
+    if (oneStepOfPlannerResult && pActionIdsToSkip.count(oneStepOfPlannerResult->actionInstance.actionId) == 0)
     {
+      auto actionId = oneStepOfPlannerResult->actionInstance.actionId;
       auto itAction = _chatbotDomain->actions.find(actionId);
       if (itAction != _chatbotDomain->actions.end())
       {
-        auto& action = itAction->second;
-        std::string text = action.text;
-        cp::replaceVariables(text, _chatbotProblem->problem.variablesToValue());
+        const ChatbotAction& cbAction = itAction->second;
+        std::string text = oneStepOfPlannerResult->actionInstance.toStr();
+        //cp::replaceVariables(text, _chatbotProblem->problem.variablesToValue());
+        //cp::replaceVariables(text, oneStepOfPlannerResult->actionInstance.parameters);
+        if (cbAction.potentialEffect)
+        {
+          if (!oneStepOfPlannerResult->actionInstance.parameters.empty())
+            text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->clone(&oneStepOfPlannerResult->actionInstance.parameters)->toStr();
+          else
+            text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->toStr();
+        }
+
         _printChatRobotMessage(text);
-        pTextsToSay.emplace_back(text, action.language);
+        pTextsToSay.emplace_back(text, cbAction.language);
 
         // notify memory of the text said
         {
           TextProcessingContext outContext(SemanticAgentGrounding::me,
                                            SemanticAgentGrounding::currentUser,
-                                           action.language);
+                                           cbAction.language);
           auto semExp =
               converter::textToContextualSemExp(text, outContext,
                                                 SemanticSourceEnum::ASR, _lingDb);
           memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
           memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
         }
-        _printParametersAndNotifyPlanner(action, actionId, parameters, pNow);
-        if (action.parameters.empty() && !action.inputPtr)
+        _printParametersAndNotifyPlanner(*oneStepOfPlannerResult, pNow);
+//        if (action.parameters.empty() && !action.inputPtr)
         {
-          pActionIdsToSkip.insert(actionId);
-          _proactivityFromPlanner(pTextsToSay, pActionIdsToSkip, pNow);
+    //      pActionIdsToSkip.insert(actionId);
+    //      _proactivityFromPlanner(pTextsToSay, pActionIdsToSkip, pNow);
         }
       }
     }
+    _printGoalsAndFacts();
   }
 }
 
 
-void MainWindow::_printParametersAndNotifyPlanner(const ChatbotAction& pAction,
-                                                  const std::string& pActionId,
-                                                  const std::map<std::string, std::string>& pParameters,
+void MainWindow::_printParametersAndNotifyPlanner(const cp::OneStepOfPlannerResult& pOneStepOfPlannerResult,
                                                   const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   std::string paramLines;
+  /*
   for (const auto& currParameter : pAction.parameters)
   {
     if (!paramLines.empty())
@@ -619,7 +607,7 @@ void MainWindow::_printParametersAndNotifyPlanner(const ChatbotAction& pAction,
     auto semExp =
         converter::textToContextualSemExp(currParameter.text, inContext,
                                           SemanticSourceEnum::UNKNOWN, _lingDb);
-    _currentActionParameters.emplace_back();
+    //_currentActionParameters.emplace_back();
     auto& actionParam = _currentActionParameters.back();
     actionParam.urlizeInput = mystd::urlizeText(currParameter.text);
     actionParam.semExp = semExp->clone();
@@ -630,13 +618,14 @@ void MainWindow::_printParametersAndNotifyPlanner(const ChatbotAction& pAction,
   }
   if (pAction.inputPtr)
     _effectAfterCurrentInput = std::make_unique<cp::SetOfFacts>(pAction.inputPtr->effect);
+  */
   if (!paramLines.empty())
   {
     _ui->textBrowser_chat_history->setTextColor(_outFontColor);
     _ui->textBrowser_chat_history->append(QString::fromUtf8(paramLines.c_str()));
   }
 
-  cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pActionId, pParameters, pNow);
+  cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pOneStepOfPlannerResult, pNow);
 }
 
 
@@ -796,7 +785,7 @@ void MainWindow::_appendLogs(const std::list<std::string>& pLogs)
 
 void MainWindow::_clearLoadedScenarios()
 {
-  this->setWindowTitle("Semantic reasoner viewer");
+  this->setWindowTitle("Social robotics planification lab");
   auto& semMemory = *_semMemoryPtr;
   semMemory.clear();
   _semMemoryBinaryPtr->clear();
@@ -804,8 +793,6 @@ void MainWindow::_clearLoadedScenarios()
   {
     _chatbotDomain.reset();
     _chatbotProblem.reset();
-    _currentActionParameters.clear();
-    _effectAfterCurrentInput.reset();
   }
   _lingDb.reset();
   memoryOperation::defaultKnowledge(semMemory, _lingDb);
@@ -1131,6 +1118,30 @@ void MainWindow::on_actionSet_problem_triggered()
   _chatbotProblem = std::make_unique<ChatbotProblem>();
   loadChatbotProblem(*_chatbotProblem, file);
   _proactivelyAskThePlanner(now);
+}
+
+void MainWindow::_printGoalsAndFacts()
+{
+  // Print goals
+  const auto& goals = _chatbotProblem->problem.goals();
+  std::stringstream ss;
+  for (auto& currGoalPrority : goals)
+    for (auto& currGoal : currGoalPrority.second)
+      ss << currGoalPrority.first << " " << currGoal.toStr();
+
+  _ui->textBrowser_goals->clear();
+  _ui->textBrowser_goals->append(QString::fromUtf8(ss.str().c_str()));
+
+  // Print facts
+  {
+    const auto& facts = _chatbotProblem->problem.facts();
+    std::stringstream ssFacts;
+    for (auto& currFact : facts)
+      ssFacts << currFact.toStr() << "\n";
+
+    _ui->textBrowser_facts->clear();
+    _ui->textBrowser_facts->append(QString::fromUtf8(ssFacts.str().c_str()));
+  }
 }
 
 
