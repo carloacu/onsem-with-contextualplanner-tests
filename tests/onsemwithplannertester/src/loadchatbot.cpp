@@ -2,7 +2,10 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <contextualplanner/types/factcondition.hpp>
+#include <contextualplanner/types/setofinferences.hpp>
+#include <onsem/common/utility/lexical_cast.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/fixedsynthesisexpression.hpp>
+#include <onsem/texttosemantic/dbtype/semanticexpression/groundedexpression.hpp>
 #include <onsem/semantictotext/semanticconverter.hpp>
 #include <onsem/semantictotext/semexpoperators.hpp>
 #include <onsem/semantictotext/triggers.hpp>
@@ -15,7 +18,7 @@ namespace
 std::string newId(
     const std::string& pBaseName,
     const std::map<cp::ActionId, ChatbotAction>& pActions) {
-  if (pActions.count(pBaseName) == 0)
+  if (pActions.count(pBaseName) == 0 && !pBaseName.empty())
     return pBaseName;
 
   std::size_t nextId = 1;
@@ -31,6 +34,30 @@ std::string newId(
   assert(false);
   return "";
 }
+
+void _loadGoals(
+    std::map<int, std::vector<cp::Goal>>& pGoals,
+    const boost::property_tree::ptree& pTree)
+{
+  for (auto& currGoalListTree : pTree)
+  {
+    bool firstIteration = true;
+    int priority = 1;
+    for (auto& currGoalWithPriorityTree : currGoalListTree.second)
+    {
+      if (firstIteration)
+      {
+        priority = mystd::lexical_cast<int>(currGoalWithPriorityTree.second.get_value<std::string>());
+        firstIteration = false;
+      }
+      else
+      {
+        pGoals[priority].push_back(currGoalWithPriorityTree.second.get_value<std::string>());
+      }
+    }
+  }
+}
+
 }
 
 void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
@@ -92,7 +119,8 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
               }
               else
               {
-                currParam.question = currParameterTree.second.get_value<std::string>();
+                for (auto& currParameterQuestionTree : currParameterTree.second)
+                  currParam.questions.emplace_back(currParameterQuestionTree.second.get_value<std::string>());
               }
             }
           }
@@ -105,8 +133,7 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
 
         auto goalsToAddTreeOpt = currActionTree.second.get_child_optional("goalsToAdd");
         if (goalsToAddTreeOpt)
-          for (auto& currGoalTree : *goalsToAddTreeOpt)
-            currChatbotAction.goalsToAdd.push_back(currGoalTree.second.get_value<std::string>());
+          _loadGoals(currChatbotAction.goalsToAdd, *goalsToAddTreeOpt);
       }
     }
   }
@@ -141,8 +168,34 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
     }
     else if (currChatbotAttr.first == "goals")
     {
-      for (auto& currGoalTree : currChatbotAttr.second)
-        pChatbotProblem.problem.pushBackGoal(currGoalTree.second.get_value<std::string>(), now);
+      std::map<int, std::vector<cp::Goal>> goals;
+      _loadGoals(goals, currChatbotAttr.second);
+      pChatbotProblem.problem.addGoals(goals, now);
+    }
+    else if (currChatbotAttr.first == "inferences")
+    {
+      std::size_t inferenceCounter = 1;
+      for (auto& currInferenceTree : currChatbotAttr.second)
+      {
+        auto condition = cp::FactCondition::fromStr(currInferenceTree.second.get("condition", ""));
+        auto effect = cp::FactModification::fromStr(currInferenceTree.second.get("effect", ""));
+
+        if (condition && effect)
+        {
+          auto setOfInferences = std::make_shared<cp::SetOfInferences>();
+          pChatbotProblem.problem.addSetOfInferences("soi", setOfInferences);
+          cp::Inference inference(std::move(condition), std::move(effect));
+
+          auto parametersTreeOpt = currInferenceTree.second.get_child_optional("parameters");
+          if (parametersTreeOpt)
+            for (auto& currParameterTree : *parametersTreeOpt)
+              inference.parameters.push_back(currParameterTree.second.get_value<std::string>());
+          std::stringstream ssId;
+          ssId << "inference" << inferenceCounter;
+          ++inferenceCounter;
+          setOfInferences->addInference(ssId.str(), inference);
+        }
+      }
     }
   }
 }
@@ -171,18 +224,18 @@ void addChatbotDomaintoASemanticMemory(
     if (!currAction.trigger.empty())
     {
       auto textProcToRobot = TextProcessingContext::getTextProcessingContextToRobot(currAction.language);
-      auto triggerSemExp = converter::textToContextualSemExp(currAction.trigger, textProcToRobot, SemanticSourceEnum::UNKNOWN, pLingDb);
+      textProcToRobot.isTimeDependent = false;
+      auto triggerSemExp = converter::textToSemExp(currAction.trigger, textProcToRobot, pLingDb);
 
-      auto textProcFromRobot = TextProcessingContext::getTextProcessingContextFromRobot(currAction.language);
-      const std::list<std::string> references{1, beginOfActionId + currActionWithId.first};
-      auto semExpWithFiexedSynthesis = std::make_unique<FixedSynthesisExpression>(
-            converter::textToContextualSemExp(currAction.text, textProcFromRobot, SemanticSourceEnum::UNKNOWN, pLingDb, &references));
-      semExpWithFiexedSynthesis->langToSynthesis.emplace(currAction.language, currAction.text);
+      std::map<std::string, std::vector<std::string>> parameterLabelToQuestionsStrs;
+      for (const auto& currParameter : currAction.parameters)
+        parameterLabelToQuestionsStrs[currParameter.text] = currParameter.questions;
 
-      memoryOperation::resolveAgentAccordingToTheContext(triggerSemExp, pSemanticMemory, pLingDb);
-      triggers::add(std::move(triggerSemExp),
-                    std::move(semExpWithFiexedSynthesis),
-                    pSemanticMemory, pLingDb);
+      auto outputResourceGrdExp =
+          std::make_unique<GroundedExpression>(
+            converter::createResourceWithParameters("action", currActionWithId.first, parameterLabelToQuestionsStrs,
+                                                    *triggerSemExp, pLingDb, currAction.language));
+      triggers::add(std::move(triggerSemExp), std::move(outputResourceGrdExp), pSemanticMemory, pLingDb);
     }
 
     cp::Action action(currAction.precondition ? currAction.precondition->clone() : std::unique_ptr<cp::FactCondition>(),

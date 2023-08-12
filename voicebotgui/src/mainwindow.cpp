@@ -12,6 +12,7 @@
 #include <boost/property_tree/xml_parser.hpp>
 #include <contextualplanner/util/replacevariables.hpp>
 #include <onsem/common/utility/string.hpp>
+#include <onsem/common/utility/uppercasehandler.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticlanguagegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semantictimegrounding.hpp>
 #include <onsem/texttosemantic/tool/semexpgetter.hpp>
@@ -44,6 +45,36 @@ const int _leftContextualInfos = 830;
 static const QString microStr = "micro";
 static const QString stopMicroStr = "stop";
 const std::string _tmpFolder = ".";
+
+void _convertParameters(
+        std::map<std::string, std::string>& pOutParameters,
+        const std::map<std::string, std::vector<std::string>>& pInParameters)
+{
+  for (auto& currParamWithValues : pInParameters)
+  {
+    if (!currParamWithValues.second.empty())
+    {
+      auto paramValue = currParamWithValues.second[0];
+      mystd::replace_all(paramValue, " ", "_");
+      pOutParameters[currParamWithValues.first] = paramValue;
+    }
+  }
+}
+
+
+void _convertToParametersPrintable(
+        std::map<std::string, std::string>& pOutParameters,
+        const std::map<std::string, std::string>& pInParameters)
+{
+  for (auto& currParamWithValues : pInParameters)
+  {
+    auto paramValue = currParamWithValues.second;
+    onsem::lowerCaseFirstLetter(paramValue);
+    mystd::replace_all(paramValue, "_", " ");
+    pOutParameters[currParamWithValues.first] = paramValue;
+  }
+}
+
 }
 
 using namespace onsem;
@@ -432,7 +463,9 @@ std::string MainWindow::_operator_react(
     ContextualAnnotation& pContextualAnnotation,
     std::list<std::string>& pReferences,
     const std::string& pText,
-    SemanticLanguageEnum& pTextLanguage)
+    SemanticLanguageEnum& pTextLanguage,
+    std::string& pOutAnctionId,
+    std::map<std::string, std::vector<std::string>>& pParameters)
 {
   auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   auto& semMemory = *_semMemoryPtr;
@@ -463,6 +496,14 @@ std::string MainWindow::_operator_react(
   OutputterContext outputterContext(outContext);
   ExecutionDataOutputter executionDataOutputter(semMemory, _lingDb);
   executionDataOutputter.processSemExp(**reaction, outputterContext);
+
+  if (executionDataOutputter.rootExecutionData.resource)
+  {
+    pOutAnctionId = executionDataOutputter.rootExecutionData.resource->value;
+    pParameters = executionDataOutputter.rootExecutionData.resourceParameters;
+    return "";
+  }
+
   return executionDataOutputter.rootExecutionData.run(semMemory, _lingDb);
 }
 
@@ -492,36 +533,47 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     auto contextualAnnotation = ContextualAnnotation::ANSWER;
 
     std::list<std::string> references;
+    std::string outAnctionId;
+    std::map<std::string, std::vector<std::string>> parametersWithValues;
     auto text =
-        _operator_react(contextualAnnotation, references, pText, textLanguage);
+        _operator_react(contextualAnnotation, references, pText, textLanguage, outAnctionId, parametersWithValues);
     bool actinHasBeenPrinted = false;
     if (!text.empty())
     {
       _printChatRobotMessage(text);
       textsToSay.emplace_back(text, textLanguage);
-
-      /*
-      for (const auto& currRef : references)
+    }
+    else if (!outAnctionId.empty())
+    {
+      auto itAction = _chatbotDomain->actions.find(outAnctionId);
+      if (itAction != _chatbotDomain->actions.end())
       {
-        auto beginOfActionIdSize = beginOfActionId.size();
-        if (currRef.compare(0, beginOfActionIdSize, beginOfActionId) == 0)
+        const ChatbotAction& cbAction = itAction->second;
+        std::string text = cbAction.text;
+
+        // notify memory of the text said
+        if (!text.empty())
         {
-          auto actionId = currRef.substr(beginOfActionIdSize, currRef.size() - beginOfActionIdSize);
-          if (!actionId.empty())
-          {
-            auto itAction = _chatbotDomain->actions.find(actionId);
-            if (itAction != _chatbotDomain->actions.end())
-            {
-              auto& action = itAction->second;
-              std::map<std::string, std::string> parameters;
-              _printParametersAndNotifyPlanner(action, actionId, parameters, pNow);
-              actinHasBeenPrinted = true;
-              break;
-            }
-          }
+          _printChatRobotMessage(text);
+          TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                           SemanticAgentGrounding::currentUser,
+                                           cbAction.language);
+          auto semExp =
+              converter::textToContextualSemExp(text, outContext,
+                                                SemanticSourceEnum::ASR, _lingDb);
+          memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
+          memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
         }
+
+        std::map<std::string, std::string> parameters;
+        _convertParameters(parameters, parametersWithValues);
+        if (cbAction.effect)
+          _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
+        for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
+          for (const auto& currGoal : currGoalWithPririty.second)
+            _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters), pNow, currGoalWithPririty.first);
       }
-      */
+      _printGoalsAndFacts();
     }
 
     if (!actinHasBeenPrinted)
@@ -553,37 +605,42 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
       if (itAction != _chatbotDomain->actions.end())
       {
         const ChatbotAction& cbAction = itAction->second;
-        std::string text = oneStepOfPlannerResult->actionInstance.toStr();
-        //cp::replaceVariables(text, _chatbotProblem->problem.variablesToValue());
-        //cp::replaceVariables(text, oneStepOfPlannerResult->actionInstance.parameters);
-        if (cbAction.potentialEffect)
+        std::string text = cbAction.text;
+
+        if (!text.empty())
         {
-          if (!oneStepOfPlannerResult->actionInstance.parameters.empty())
-            text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->clone(&oneStepOfPlannerResult->actionInstance.parameters)->toStr();
-          else
-            text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->toStr();
+          std::map<std::string, std::string> printableParameters;
+          _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
+          cp::replaceVariables(text, printableParameters);
+
+          // notify memory of the text said
+          {
+            TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                             SemanticAgentGrounding::currentUser,
+                                             cbAction.language);
+            auto semExp =
+                converter::textToContextualSemExp(text, outContext,
+                                                  SemanticSourceEnum::ASR, _lingDb);
+            memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
+            memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
+          }
+        }
+        else
+        {
+          text = oneStepOfPlannerResult->actionInstance.toStr();
+          if (cbAction.potentialEffect)
+          {
+            if (!oneStepOfPlannerResult->actionInstance.parameters.empty())
+              text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->clone(&oneStepOfPlannerResult->actionInstance.parameters)->toStr();
+            else
+              text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->toStr();
+          }
         }
 
         _printChatRobotMessage(text);
         pTextsToSay.emplace_back(text, cbAction.language);
 
-        // notify memory of the text said
-        {
-          TextProcessingContext outContext(SemanticAgentGrounding::me,
-                                           SemanticAgentGrounding::currentUser,
-                                           cbAction.language);
-          auto semExp =
-              converter::textToContextualSemExp(text, outContext,
-                                                SemanticSourceEnum::ASR, _lingDb);
-          memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
-          memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
-        }
         _printParametersAndNotifyPlanner(*oneStepOfPlannerResult, pNow);
-//        if (action.parameters.empty() && !action.inputPtr)
-        {
-    //      pActionIdsToSkip.insert(actionId);
-    //      _proactivityFromPlanner(pTextsToSay, pActionIdsToSkip, pNow);
-        }
       }
     }
     _printGoalsAndFacts();
@@ -1127,7 +1184,7 @@ void MainWindow::_printGoalsAndFacts()
   std::stringstream ss;
   for (auto& currGoalPrority : goals)
     for (auto& currGoal : currGoalPrority.second)
-      ss << currGoalPrority.first << " " << currGoal.toStr();
+      ss << currGoalPrority.first << " " << currGoal.toStr() << "\n";
 
   _ui->textBrowser_goals->clear();
   _ui->textBrowser_goals->append(QString::fromUtf8(ss.str().c_str()));

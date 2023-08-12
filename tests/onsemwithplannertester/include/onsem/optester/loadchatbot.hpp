@@ -14,7 +14,7 @@ const std::string beginOfActionId = "actionId-";
 struct ONSEMWITHPLANNERTESTER_API ChatbotParam
 {
   std::string text{};
-  std::string question{};
+  std::vector<std::string> questions{};
 };
 
 
@@ -28,7 +28,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotAction
   std::unique_ptr<cp::FactCondition> preferInContext{};
   std::unique_ptr<cp::FactModification> effect{};
   std::unique_ptr<cp::FactModification> potentialEffect{};
-  std::vector<cp::Goal> goalsToAdd{};
+  std::map<int, std::vector<cp::Goal>> goalsToAdd{};
 };
 
 struct ONSEMWITHPLANNERTESTER_API ChatbotDomain

@@ -176,7 +176,9 @@ private:
       onsem::ContextualAnnotation& pContextualAnnotation,
       std::list<std::string>& pReferences,
       const std::string& pText,
-      SemanticLanguageEnum& pTextLanguage);
+      SemanticLanguageEnum& pTextLanguage,
+      std::string& pOutAnctionId,
+      std::map<std::string, std::vector<std::string>>& pParameters);
   void _onNewTextSubmitted(const std::string& pText,
                            const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
