@@ -125,6 +125,12 @@ MainWindow::MainWindow(const std::filesystem::path& pCorpusEquivalencesFolder,
   _ui->textBrowser_chat_history->viewport()->setAutoFillBackground(false);
   _ui->textBrowser_chat_history->setAttribute(Qt::WA_TranslucentBackground, true);
 
+  _ui->textBrowser_goals->viewport()->setAutoFillBackground(false);
+  _ui->textBrowser_goals->setAttribute(Qt::WA_TranslucentBackground, true);
+
+  _ui->textBrowser_facts->viewport()->setAutoFillBackground(false);
+  _ui->textBrowser_facts->setAttribute(Qt::WA_TranslucentBackground, true);
+
   _ui->textBrowser_PrintMemory->viewport()->setAutoFillBackground(false);
   _ui->textBrowser_PrintMemory->setAttribute(Qt::WA_TranslucentBackground, true);
   _ui->textBrowser_PrintMemory->setLineWrapMode(QTextEdit::NoWrap);
@@ -340,20 +346,30 @@ void MainWindow::onRescaleChatPanel()
     int mainFrameY = 90;
     int asrFrameY = _ui->tab_Chat->height() - _bottomBoxHeight - 10;
     int goalsHeight = 300;
-    int goalsWidth = 300;
+    int goalsWidth = _ui->tab_Chat->width() / 2;
 
     _ui->textBrowser_chat_history->setGeometry(10,
                                                mainFrameY,
                                                _ui->tab_Chat->width() - 20 - goalsWidth,
                                                asrFrameY - mainFrameY - 20);
 
+    _ui->label_goals->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+                                  mainFrameY,
+                                  goalsWidth,
+                                  _ui->label_goals->height());
+
     _ui->textBrowser_goals->setGeometry(10 + _ui->textBrowser_chat_history->width(),
-                                        mainFrameY,
+                                        mainFrameY + 10 + _ui->label_goals->height(),
                                         goalsWidth,
                                         goalsHeight);
 
+    _ui->label_world_state->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+                                  mainFrameY + goalsHeight,
+                                  goalsWidth,
+                                  _ui->label_world_state->height());
+
     _ui->textBrowser_facts->setGeometry(10 + _ui->textBrowser_chat_history->width(),
-                                        mainFrameY + goalsHeight,
+                                        mainFrameY + goalsHeight + 10 + _ui->label_world_state->height(),
                                         goalsWidth,
                                         asrFrameY - mainFrameY - 20  - goalsHeight);
   }
@@ -513,8 +529,6 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
                                      const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   _ui->textBrowser_chat_history->setTextColor(_inFontColor);
-  _ui->textBrowser_chat_history->append(QString::fromUtf8(_inLabel.c_str()) + " \"" +
-                                        QString::fromUtf8(pText.c_str()) + "\"");
 
   LineEditHistoricalWrapper& hWrapper = _lineEditHistorical[_ui->lineEdit_history_newText];
   hWrapper.addNewText(pText, true);
@@ -523,12 +537,27 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
   std::list<TextWithLanguage> textsToSay;
   if (!pText.empty() && pText[0] == '+')
   {
-    _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr(pText.substr(1, pText.size() - 1)), pNow);
+    auto factToAddStr = pText.substr(1, pText.size() - 1);
+    _ui->textBrowser_chat_history->append("addFact: " + QString::fromUtf8(factToAddStr.c_str()));
+    _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr(factToAddStr), pNow);
+    std::set<std::string> actionIdsToSkip;
+    _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
+  }
+  else if (!pText.empty() && pText[0] == '-')
+  {
+    auto factToAddStr = pText.substr(1, pText.size() - 1);
+    _ui->textBrowser_chat_history->append("removeFact: " + QString::fromUtf8(factToAddStr.c_str()));
+    _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr("!" + factToAddStr), pNow);
     std::set<std::string> actionIdsToSkip;
     _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
   }
   else
   {
+    if (pText.empty())
+      _ui->textBrowser_chat_history->append("ping");
+    else
+      _ui->textBrowser_chat_history->append(QString::fromUtf8(_inLabel.c_str()) + " \"" +
+                                            QString::fromUtf8(pText.c_str()) + "\"");
     auto textLanguage = SemanticLanguageEnum::UNKNOWN;
     auto contextualAnnotation = ContextualAnnotation::ANSWER;
 
@@ -540,7 +569,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     bool actinHasBeenPrinted = false;
     if (!text.empty())
     {
-      _printChatRobotMessage(text);
+      _printChatRobotMessage("tts: \"" + text + "\"");
       textsToSay.emplace_back(text, textLanguage);
     }
     else if (!outAnctionId.empty())
@@ -554,7 +583,8 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
         // notify memory of the text said
         if (!text.empty())
         {
-          _printChatRobotMessage(text);
+          _printChatRobotMessage("tts: \"" + text + "\"");
+          textsToSay.emplace_back(text, textLanguage);
           TextProcessingContext outContext(SemanticAgentGrounding::me,
                                            SemanticAgentGrounding::currentUser,
                                            cbAction.language);
@@ -605,13 +635,14 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
       if (itAction != _chatbotDomain->actions.end())
       {
         const ChatbotAction& cbAction = itAction->second;
-        std::string text = cbAction.text;
 
-        if (!text.empty())
+        if (!cbAction.text.empty())
         {
           std::map<std::string, std::string> printableParameters;
           _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
+          std::string text = cbAction.text;
           cp::replaceVariables(text, printableParameters);
+          mystd::replace_all(text, " est les ", " sont les ");
 
           // notify memory of the text said
           {
@@ -624,23 +655,15 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
             memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
             memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
           }
+          _printChatRobotMessage("tts: \"" + text + "\"");
+          pTextsToSay.emplace_back(text, cbAction.language);
         }
         else
         {
-          text = oneStepOfPlannerResult->actionInstance.toStr();
-          if (cbAction.potentialEffect)
-          {
-            if (!oneStepOfPlannerResult->actionInstance.parameters.empty())
-              text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->clone(&oneStepOfPlannerResult->actionInstance.parameters)->toStr();
-            else
-              text += " \t\t\t potentialEffect: " + cbAction.potentialEffect->toStr();
-          }
+          _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr());
         }
 
-        _printChatRobotMessage(text);
-        pTextsToSay.emplace_back(text, cbAction.language);
-
-        _printParametersAndNotifyPlanner(*oneStepOfPlannerResult, pNow);
+        cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, *oneStepOfPlannerResult, pNow);
       }
     }
     _printGoalsAndFacts();
@@ -648,48 +671,10 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 }
 
 
-void MainWindow::_printParametersAndNotifyPlanner(const cp::OneStepOfPlannerResult& pOneStepOfPlannerResult,
-                                                  const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
-{
-  std::string paramLines;
-  /*
-  for (const auto& currParameter : pAction.parameters)
-  {
-    if (!paramLines.empty())
-      paramLines += "   |";
-    paramLines += "   \"" + currParameter.text + "\"";
-    TextProcessingContext inContext(SemanticAgentGrounding::currentUser,
-                                    SemanticAgentGrounding::me,
-                                    pAction.language);
-    auto semExp =
-        converter::textToContextualSemExp(currParameter.text, inContext,
-                                          SemanticSourceEnum::UNKNOWN, _lingDb);
-    //_currentActionParameters.emplace_back();
-    auto& actionParam = _currentActionParameters.back();
-    actionParam.urlizeInput = mystd::urlizeText(currParameter.text);
-    actionParam.semExp = semExp->clone();
-    memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
-    actionParam.semExpMergedWithContext = std::move(semExp);
-    actionParam.effect = currParameter.effect;
-    actionParam.goalsToAdd = currParameter.goalsToAdd;
-  }
-  if (pAction.inputPtr)
-    _effectAfterCurrentInput = std::make_unique<cp::SetOfFacts>(pAction.inputPtr->effect);
-  */
-  if (!paramLines.empty())
-  {
-    _ui->textBrowser_chat_history->setTextColor(_outFontColor);
-    _ui->textBrowser_chat_history->append(QString::fromUtf8(paramLines.c_str()));
-  }
-
-  cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pOneStepOfPlannerResult, pNow);
-}
-
-
 void MainWindow::_printChatRobotMessage(const std::string& pText)
 {
   _ui->textBrowser_chat_history->setTextColor(_outFontColor);
-  _ui->textBrowser_chat_history->append("out: \"" + QString::fromUtf8(pText.c_str()) + "\"");
+  _ui->textBrowser_chat_history->append(QString::fromUtf8(pText.c_str()));
 }
 
 
@@ -805,6 +790,8 @@ void MainWindow::_loadCurrScenario()
                          (_inputScenariosFolder / scenarioFilename).string(), *_semMemoryPtr, _lingDb);
   }
   _ui->textBrowser_chat_history->clear();
+  _ui->textBrowser_goals->clear();
+  _ui->textBrowser_facts->clear();
   _appendLogs(linesToDisplay);
 }
 
@@ -881,6 +868,8 @@ void MainWindow::_clearLoadedScenarios()
 
   _scenarioContainer.clear();
   _ui->textBrowser_chat_history->clear();
+  _ui->textBrowser_goals->clear();
+  _ui->textBrowser_facts->clear();
   _ui->pushButton_Chat_PrevScenario->setEnabled(false);
   _ui->pushButton_Chat_NextScenario->setEnabled(false);
   _switchToReferenceButtonSetEnabled(false);
@@ -1182,9 +1171,13 @@ void MainWindow::_printGoalsAndFacts()
   // Print goals
   const auto& goals = _chatbotProblem->problem.goals();
   std::stringstream ss;
+  ss << "Priority     Goal\n";
+  ss << "-----------------------\n";
+
   for (auto& currGoalPrority : goals)
     for (auto& currGoal : currGoalPrority.second)
-      ss << currGoalPrority.first << " " << currGoal.toStr() << "\n";
+      ss << currGoalPrority.first << "                  "
+         << currGoal.toStr() << "\n";
 
   _ui->textBrowser_goals->clear();
   _ui->textBrowser_goals->append(QString::fromUtf8(ss.str().c_str()));

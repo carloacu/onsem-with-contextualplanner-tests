@@ -40,7 +40,7 @@
       </property>
       <widget class="QWidget" name="tab_Chat">
        <attribute name="title">
-        <string>Chat</string>
+        <string>Scenario</string>
        </attribute>
        <widget class="QFrame" name="frame_history_asr">
         <property name="geometry">
@@ -137,7 +137,7 @@
          </font>
         </property>
         <property name="cursor" stdset="0">
-         <cursorShape>WaitCursor</cursorShape>
+         <cursorShape>ArrowCursor</cursorShape>
         </property>
         <property name="autoFillBackground">
          <bool>false</bool>
@@ -171,7 +171,7 @@ p, li { white-space: pre-wrap; }
          </font>
         </property>
         <property name="text">
-         <string>Chat</string>
+         <string>Scenario</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignCenter</set>
@@ -231,8 +231,8 @@ p, li { white-space: pre-wrap; }
        <widget class="QTextBrowser" name="textBrowser_goals">
         <property name="geometry">
          <rect>
-          <x>690</x>
-          <y>110</y>
+          <x>700</x>
+          <y>120</y>
           <width>201</width>
           <height>101</height>
          </rect>
@@ -296,10 +296,52 @@ p, li { white-space: pre-wrap; }
          <set>Qt::LinksAccessibleByKeyboard|Qt::LinksAccessibleByMouse|Qt::TextBrowserInteraction|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
         </property>
        </widget>
+       <widget class="QLabel" name="label_goals">
+        <property name="geometry">
+         <rect>
+          <x>700</x>
+          <y>80</y>
+          <width>191</width>
+          <height>21</height>
+         </rect>
+        </property>
+        <property name="font">
+         <font>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>Goals</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+       <widget class="QLabel" name="label_world_state">
+        <property name="geometry">
+         <rect>
+          <x>690</x>
+          <y>270</y>
+          <width>191</width>
+          <height>21</height>
+         </rect>
+        </property>
+        <property name="font">
+         <font>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>World state</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+        </property>
+       </widget>
       </widget>
       <widget class="QWidget" name="tab_chatdiagnosis">
        <attribute name="title">
-        <string>Chat Diagnosis</string>
+        <string>Diagnosis</string>
        </attribute>
        <widget class="QTextBrowser" name="textBrowser_PrintMemory">
         <property name="geometry">
@@ -360,7 +402,7 @@ p, li { white-space: pre-wrap; }
       </widget>
       <widget class="QWidget" name="tab_2">
        <attribute name="title">
-        <string>Chat Regression Tests</string>
+        <string>Regression Tests</string>
        </attribute>
        <widget class="QPushButton" name="pushButton_History_compareResults">
         <property name="enabled">

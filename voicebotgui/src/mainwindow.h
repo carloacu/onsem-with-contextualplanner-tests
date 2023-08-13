@@ -184,8 +184,6 @@ private:
   void _proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
                                std::set<std::string>& pActionIdsToSkip,
                                const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
-  void _printParametersAndNotifyPlanner(const cp::OneStepOfPlannerResult& pOneStepOfPlannerResult,
-                                        const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _printChatRobotMessage(const std::string& pText);
   void _sayText(std::list<TextWithLanguage>& pTextsToSay);
   void _loadCurrScenario();
