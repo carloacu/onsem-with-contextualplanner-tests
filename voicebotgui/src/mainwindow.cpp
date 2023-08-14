@@ -64,14 +64,17 @@ void _convertParameters(
 
 void _convertToParametersPrintable(
         std::map<std::string, std::string>& pOutParameters,
-        const std::map<std::string, std::string>& pInParameters)
+        const std::map<std::string, std::set<std::string>>& pInParameters)
 {
   for (auto& currParamWithValues : pInParameters)
   {
-    auto paramValue = currParamWithValues.second;
-    onsem::lowerCaseFirstLetter(paramValue);
-    mystd::replace_all(paramValue, "_", " ");
-    pOutParameters[currParamWithValues.first] = paramValue;
+    if (!currParamWithValues.second.empty())
+    {
+      auto paramValue = *currParamWithValues.second.begin();
+      onsem::lowerCaseFirstLetter(paramValue);
+      mystd::replace_all(paramValue, "_", " ");
+      pOutParameters[currParamWithValues.first] = paramValue;
+    }
   }
 }
 

@@ -174,6 +174,9 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
     }
     else if (currChatbotAttr.first == "inferences")
     {
+      auto setOfInferences = std::make_shared<cp::SetOfInferences>();
+      pChatbotProblem.problem.addSetOfInferences("soi", setOfInferences);
+
       std::size_t inferenceCounter = 1;
       for (auto& currInferenceTree : currChatbotAttr.second)
       {
@@ -182,8 +185,6 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
 
         if (condition && effect)
         {
-          auto setOfInferences = std::make_shared<cp::SetOfInferences>();
-          pChatbotProblem.problem.addSetOfInferences("soi", setOfInferences);
           cp::Inference inference(std::move(condition), std::move(effect));
 
           auto parametersTreeOpt = currInferenceTree.second.get_child_optional("parameters");
