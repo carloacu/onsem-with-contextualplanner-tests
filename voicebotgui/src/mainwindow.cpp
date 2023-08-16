@@ -1177,10 +1177,12 @@ void MainWindow::_printGoalsAndFacts()
   ss << "Priority     Goal\n";
   ss << "-----------------------\n";
 
-  for (auto& currGoalPrority : goals)
-    for (auto& currGoal : currGoalPrority.second)
-      ss << currGoalPrority.first << "                  "
+  for (auto itGoalPrority = goals.rbegin(); itGoalPrority != goals.rend(); ++itGoalPrority)
+  {
+    for (auto& currGoal : itGoalPrority->second)
+      ss << itGoalPrority->first << "                  "
          << currGoal.toStr() << "\n";
+  }
 
   _ui->textBrowser_goals->clear();
   _ui->textBrowser_goals->append(QString::fromUtf8(ss.str().c_str()));

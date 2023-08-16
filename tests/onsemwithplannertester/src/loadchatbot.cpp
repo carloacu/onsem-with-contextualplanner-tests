@@ -126,8 +126,26 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
           }
         }
 
+        auto priorityStr = currActionTree.second.get("priority", "");
+
+        auto prefereInContexStrInput = currActionTree.second.get("preferInContext", "");
+        std::stringstream prefereInContextSs;
+        prefereInContextSs << prefereInContexStrInput;
+        int timeEstimation = mystd::lexical_cast<int>(currActionTree.second.get("timeEstimation", "0"));
+        if (priorityStr == "low")
+          timeEstimation += 5;
+        bool noPrefernContext = prefereInContexStrInput.empty();
+        while (timeEstimation > 0)
+        {
+          if (noPrefernContext)
+            noPrefernContext = false;
+          else
+            prefereInContextSs << " & ";
+          prefereInContextSs << "lowPriority" << timeEstimation;
+          --timeEstimation;
+        }
+        currChatbotAction.preferInContext = cp::FactCondition::fromStr(prefereInContextSs.str());
         currChatbotAction.precondition = cp::FactCondition::fromStr(currActionTree.second.get("precondition", ""));
-        currChatbotAction.preferInContext = cp::FactCondition::fromStr(currActionTree.second.get("preferInContext", ""));
         currChatbotAction.effect = cp::FactModification::fromStr(currActionTree.second.get("effect", ""));
         currChatbotAction.potentialEffect = cp::FactModification::fromStr(currActionTree.second.get("potentialEffect", ""));
 
