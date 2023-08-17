@@ -1292,6 +1292,7 @@ void MainWindow::_printGoalsAndFacts()
 
   if (!mainGoal.empty())
   {
+    _chatbotProblem->variables["becauseIntention"] = "Parce que " + mainGoal;
     auto currentAction = _chatbotProblem->variables["currentAction"];
     if (!currentAction.empty())
     {
@@ -1305,6 +1306,7 @@ void MainWindow::_printGoalsAndFacts()
   }
   else
   {
+    _chatbotProblem->variables["becauseIntention"] = "Je ne sais pas.";
     _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
   }
 
