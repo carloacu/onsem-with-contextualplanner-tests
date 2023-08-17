@@ -23,6 +23,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotAction
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
   std::string trigger{};
   std::string text{};
+  std::string description{};
   std::vector<ChatbotParam> parameters{};
   std::unique_ptr<cp::FactCondition> precondition{};
   std::unique_ptr<cp::FactCondition> preferInContext{};
@@ -43,6 +44,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotProblem
 {
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
   cp::Problem problem{};
+  std::map<std::string, std::string> variables{};
 };
 
 

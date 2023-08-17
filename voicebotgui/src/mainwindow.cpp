@@ -13,10 +13,14 @@
 #include <contextualplanner/util/replacevariables.hpp>
 #include <onsem/common/utility/string.hpp>
 #include <onsem/common/utility/uppercasehandler.hpp>
+#include <onsem/texttosemantic/dbtype/semanticexpression/groundedexpression.hpp>
+#include <onsem/texttosemantic/dbtype/semanticexpression/listexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticlanguagegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semantictimegrounding.hpp>
+#include <onsem/texttosemantic/dbtype/semanticgrounding/semanticstatementgrounding.hpp>
 #include <onsem/texttosemantic/tool/semexpgetter.hpp>
 #include <onsem/texttosemantic/languagedetector.hpp>
+#include <onsem/semantictotext/triggers.hpp>
 #include <onsem/semantictotext/tool/semexpcomparator.hpp>
 #include <onsem/semantictotext/outputter/executiondataoutputter.hpp>
 #include <onsem/semantictotext/outputter/virtualoutputter.hpp>
@@ -77,6 +81,57 @@ void _convertToParametersPrintable(
     }
   }
 }
+
+std::string _semExptoStr(const SemanticExpression& pSemExp,
+                         SemanticLanguageEnum pLanguage,
+                         SemanticMemory& pMemory,
+                         const linguistics::LinguisticDatabase& pLingDb)
+{
+  TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                   SemanticAgentGrounding::currentUser,
+                                   pLanguage);
+  OutputterContext outputterContext(outContext);
+  ExecutionDataOutputter executionDataOutputter(pMemory, pLingDb);
+  executionDataOutputter.processSemExp(pSemExp, outputterContext);
+  return executionDataOutputter.rootExecutionData.run(pMemory, pLingDb);
+}
+
+std::string _imperativeToMandatory(const SemanticExpression& pSemExp,
+                                   SemanticLanguageEnum pLanguage,
+                                   SemanticMemory& pMemory,
+                                   const linguistics::LinguisticDatabase& pLingDb)
+{
+  UniqueSemanticExpression semExpCopied = pSemExp.clone();
+  converter::imperativeToMandatory(semExpCopied);
+  return _semExptoStr(*semExpCopied, pLanguage, pMemory, pLingDb);
+}
+
+void _imperativeToIndicativeSemExp(SemanticExpression& pSemExp)
+{
+  auto* grdExpPtr = pSemExp.getGrdExpPtr_SkipWrapperPtrs();
+  if (grdExpPtr != nullptr)
+  {
+    auto* statGrdPtr = grdExpPtr->grounding().getStatementGroundingPtr();
+    if (statGrdPtr != nullptr)
+      statGrdPtr->requests.erase(SemanticRequestType::ACTION);
+  }
+
+  auto* listExpPtr = pSemExp.getListExpPtr_SkipWrapperPtrs();
+  if (listExpPtr != nullptr)
+    for (auto& currElt : listExpPtr->elts)
+      _imperativeToIndicativeSemExp(*currElt);
+}
+
+std::string _imperativeToIndicative(const SemanticExpression& pSemExp,
+                                    SemanticLanguageEnum pLanguage,
+                                    SemanticMemory& pMemory,
+                                    const linguistics::LinguisticDatabase& pLingDb)
+{
+  UniqueSemanticExpression semExpCopied = pSemExp.clone();
+  _imperativeToIndicativeSemExp(*semExpCopied);
+  return _semExptoStr(*semExpCopied, pLanguage, pMemory, pLingDb);
+}
+
 
 }
 
@@ -476,43 +531,19 @@ void MainWindow::on_lineEdit_history_newText_returnPressed()
 
 
 
-
-
-std::string MainWindow::_operator_react_with_llm(
+void MainWindow::_operator_match(
     ContextualAnnotation& pContextualAnnotation,
     std::list<std::string>& pReferences,
-    const std::string& pText,
+    const SemanticExpression& pSemExp,
     SemanticLanguageEnum& pTextLanguage,
     std::string& pOutAnctionId,
-    std::map<std::string, std::vector<std::string>>& pParameters,
-    bool& pLlmAnswer)
+    std::map<std::string, std::vector<std::string>>& pParameters)
 {
-  auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   auto& semMemory = *_semMemoryPtr;
-  if (pTextLanguage == SemanticLanguageEnum::UNKNOWN)
-    pTextLanguage = linguistics::getLanguage(pText, _lingDb);
-  TextProcessingContext inContext(SemanticAgentGrounding::currentUser,
-                                  SemanticAgentGrounding::me,
-                                  pTextLanguage);
-  inContext.spellingMistakeTypesPossible.insert(SpellingMistakeType::CONJUGATION);
-  auto semExp =
-      converter::textToContextualSemExp(pText, inContext,
-                                        SemanticSourceEnum::ASR, _lingDb);
-
-  if (memoryOperation::categorize(*semExp) == SemanticExpressionCategory::QUESTION)
-  {
-    pLlmAnswer = true;
-    return "";
-  }
-
-  memoryOperation::mergeWithContext(semExp, semMemory, _lingDb);
-
-  if (pTextLanguage == SemanticLanguageEnum::UNKNOWN)
-    pTextLanguage = semMemory.defaultLanguage;
   mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
-  memoryOperation::react(reaction, semMemory, std::move(semExp), _lingDb, nullptr);
+  triggers::match(reaction, semMemory, pSemExp.clone(), _lingDb, nullptr);
   if (!reaction)
-    return "";
+    return;
   pContextualAnnotation = SemExpGetter::extractContextualAnnotation(**reaction);
   SemExpGetter::extractReferences(pReferences, **reaction);
 
@@ -527,8 +558,30 @@ std::string MainWindow::_operator_react_with_llm(
   {
     pOutAnctionId = executionDataOutputter.rootExecutionData.resource->value;
     pParameters = executionDataOutputter.rootExecutionData.resourceParameters;
-    return "";
   }
+}
+
+
+std::string MainWindow::_operator_react(
+    ContextualAnnotation& pContextualAnnotation,
+    std::list<std::string>& pReferences,
+    const SemanticExpression& pSemExp,
+    SemanticLanguageEnum& pTextLanguage)
+{
+  auto& semMemory = *_semMemoryPtr;
+  mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
+  memoryOperation::react(reaction, semMemory, pSemExp.clone(), _lingDb, nullptr);
+  if (!reaction)
+    return "";
+  pContextualAnnotation = SemExpGetter::extractContextualAnnotation(**reaction);
+  SemExpGetter::extractReferences(pReferences, **reaction);
+
+  TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                   SemanticAgentGrounding::currentUser,
+                                   pTextLanguage);
+  OutputterContext outputterContext(outContext);
+  ExecutionDataOutputter executionDataOutputter(semMemory, _lingDb);
+  executionDataOutputter.processSemExp(**reaction, outputterContext);
 
   return executionDataOutputter.rootExecutionData.run(semMemory, _lingDb);
 }
@@ -566,29 +619,30 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     else
       _ui->textBrowser_chat_history->append(QString::fromUtf8(_inLabel.c_str()) + " \"" +
                                             QString::fromUtf8(pText.c_str()) + "\"");
-    auto textLanguage = SemanticLanguageEnum::UNKNOWN;
     auto contextualAnnotation = ContextualAnnotation::ANSWER;
 
     std::list<std::string> references;
     std::string outAnctionId;
     std::map<std::string, std::vector<std::string>> parametersWithValues;
-    bool llmAnswer = false;
 
-    auto text =
-        _operator_react_with_llm(contextualAnnotation, references, pText,
-                                 textLanguage, outAnctionId, parametersWithValues,
-                                 llmAnswer);
-    bool actionHasBeenPrinted = false;
-    if (llmAnswer)
-    {
-      _printChatRobotMessage("llm answer of: \"" + pText + "\"");
-    }
-    else if (!text.empty())
-    {
-      _printChatRobotMessage("tts: \"" + text + "\"");
-      textsToSay.emplace_back(text, textLanguage);
-    }
-    else if (!outAnctionId.empty())
+    auto& semMemory = *_semMemoryPtr;
+    auto textLanguage = linguistics::getLanguage(pText, _lingDb);
+    TextProcessingContext inContext(SemanticAgentGrounding::currentUser,
+                                    SemanticAgentGrounding::me,
+                                    textLanguage);
+    inContext.spellingMistakeTypesPossible.insert(SpellingMistakeType::CONJUGATION);
+    auto semExp =
+        converter::textToContextualSemExp(pText, inContext,
+                                          SemanticSourceEnum::ASR, _lingDb);
+
+    memoryOperation::mergeWithContext(semExp, semMemory, _lingDb);
+    if (textLanguage == SemanticLanguageEnum::UNKNOWN)
+      textLanguage = semMemory.defaultLanguage;
+
+    _operator_match(contextualAnnotation, references, *semExp,
+                    textLanguage, outAnctionId, parametersWithValues);
+
+    if (!outAnctionId.empty())
     {
       auto itAction = _chatbotDomain->actions.find(outAnctionId);
       if (itAction != _chatbotDomain->actions.end())
@@ -599,6 +653,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
         // notify memory of the text said
         if (!text.empty())
         {
+          cp::replaceVariables(text, _chatbotProblem->variables);
           _printChatRobotMessage("tts: \"" + text + "\"");
           textsToSay.emplace_back(text, textLanguage);
           TextProcessingContext outContext(SemanticAgentGrounding::me,
@@ -615,14 +670,38 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
         _convertParameters(parameters, parametersWithValues);
         if (cbAction.effect)
           _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
-        for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
-          for (const auto& currGoal : currGoalWithPririty.second)
-            _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters), pNow, currGoalWithPririty.first);
+
+        auto actionDescription = cbAction.description;
+        cp::replaceVariables(actionDescription, parameters);
+        _chatbotProblem->variables["currentAction"] = actionDescription;
+
+        if (!cbAction.goalsToAdd.empty())
+        {
+          auto intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
+          for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
+            for (const auto& currGoal : currGoalWithPririty.second)
+              _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
+        }
       }
       _printGoalsAndFacts();
     }
+    else
+    {
+      if (memoryOperation::categorize(*semExp) == SemanticExpressionCategory::QUESTION)
+      {
+        _printChatRobotMessage("llm answer of: \"" + pText + "\"");
+        return;
+      }
 
-    if (!actionHasBeenPrinted && contextualAnnotation != ContextualAnnotation::QUESTION)
+      auto text = _operator_react(contextualAnnotation, references, *semExp, textLanguage);
+      if (!text.empty())
+      {
+        _printChatRobotMessage("tts: \"" + text + "\"");
+        textsToSay.emplace_back(text, textLanguage);
+      }
+    }
+
+    if (contextualAnnotation != ContextualAnnotation::QUESTION)
       _proactivityFromPlanner(textsToSay, pNow);
   }
 
@@ -648,10 +727,10 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
         {
           const ChatbotAction& cbAction = itAction->second;
 
+          std::map<std::string, std::string> printableParameters;
+          _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
           if (!cbAction.text.empty())
           {
-            std::map<std::string, std::string> printableParameters;
-            _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
             std::string text = cbAction.text;
             cp::replaceVariables(text, printableParameters);
             mystd::replace_all(text, " est les ", " sont les ");
@@ -674,6 +753,10 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
           {
             _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr());
           }
+
+          auto actionDescription = cbAction.description;
+          cp::replaceVariables(actionDescription, printableParameters);
+          _chatbotProblem->variables["currentAction"] = actionDescription;
 
           cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, *oneStepOfPlannerResult, pNow);
 
@@ -848,7 +931,7 @@ void MainWindow::_appendLogs(const std::list<std::string>& pLogs)
 
 void MainWindow::_clearLoadedScenarios()
 {
-  this->setWindowTitle("Social robotics planification lab");
+  this->setWindowTitle("Social robotics planning lab");
   auto& semMemory = *_semMemoryPtr;
   semMemory.clear();
   _semMemoryBinaryPtr->clear();
@@ -1187,17 +1270,42 @@ void MainWindow::on_actionSet_problem_triggered()
 
 void MainWindow::_printGoalsAndFacts()
 {
+
   // Print goals
   const auto& goals = _chatbotProblem->problem.goals();
   std::stringstream ss;
   ss << "Priority     Goal\n";
   ss << "-----------------------\n";
 
+  std::string mainGoal;
   for (auto itGoalPrority = goals.rbegin(); itGoalPrority != goals.rend(); ++itGoalPrority)
   {
     for (auto& currGoal : itGoalPrority->second)
+    {
+      if (mainGoal.empty())
+        mainGoal = currGoal.getGoalGroupId();
       ss << itGoalPrority->first << "                  "
          << currGoal.toStr() << "\n";
+    }
+  }
+  _chatbotProblem->variables["intention"] = mainGoal;
+
+  if (!mainGoal.empty())
+  {
+    auto currentAction = _chatbotProblem->variables["currentAction"];
+    if (!currentAction.empty())
+    {
+      onsem::lowerCaseFirstLetter(mainGoal);
+      _chatbotProblem->variables["currentActionWithIntention"] = currentAction + " parce que " + mainGoal;
+    }
+    else
+    {
+      _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
+    }
+  }
+  else
+  {
+    _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
   }
 
   _ui->textBrowser_goals->clear();

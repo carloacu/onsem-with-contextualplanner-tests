@@ -172,14 +172,19 @@ private:
   void _loadSentences(bool pTxtFirstChoice,
                       const std::string& pTextCorpusPath);
 
-  std::string _operator_react_with_llm(
+  void _operator_match(
       ContextualAnnotation& pContextualAnnotation,
       std::list<std::string>& pReferences,
-      const std::string& pText,
+      const SemanticExpression& pSemExp,
       SemanticLanguageEnum& pTextLanguage,
       std::string& pOutAnctionId,
-      std::map<std::string, std::vector<std::string>>& pParameters,
-      bool& pLlmAnswer);
+      std::map<std::string, std::vector<std::string>>& pParameters);
+
+  std::string _operator_react(
+      ContextualAnnotation& pContextualAnnotation,
+      std::list<std::string>& pReferences,
+      const SemanticExpression& pSemExp,
+      SemanticLanguageEnum& pTextLanguage);
 
   void _onNewTextSubmitted(const std::string& pText,
                            const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);

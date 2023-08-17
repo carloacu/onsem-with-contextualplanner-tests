@@ -148,6 +148,7 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
         currChatbotAction.precondition = cp::FactCondition::fromStr(currActionTree.second.get("precondition", ""));
         currChatbotAction.effect = cp::FactModification::fromStr(currActionTree.second.get("effect", ""));
         currChatbotAction.potentialEffect = cp::FactModification::fromStr(currActionTree.second.get("potentialEffect", ""));
+        currChatbotAction.description = currActionTree.second.get("description", "");
 
         auto goalsToAddTreeOpt = currActionTree.second.get_child_optional("goalsToAdd");
         if (goalsToAddTreeOpt)
