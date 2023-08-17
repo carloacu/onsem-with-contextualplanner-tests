@@ -478,13 +478,14 @@ void MainWindow::on_lineEdit_history_newText_returnPressed()
 
 
 
-std::string MainWindow::_operator_react(
+std::string MainWindow::_operator_react_with_llm(
     ContextualAnnotation& pContextualAnnotation,
     std::list<std::string>& pReferences,
     const std::string& pText,
     SemanticLanguageEnum& pTextLanguage,
     std::string& pOutAnctionId,
-    std::map<std::string, std::vector<std::string>>& pParameters)
+    std::map<std::string, std::vector<std::string>>& pParameters,
+    bool& pLlmAnswer)
 {
   auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   auto& semMemory = *_semMemoryPtr;
@@ -497,6 +498,12 @@ std::string MainWindow::_operator_react(
   auto semExp =
       converter::textToContextualSemExp(pText, inContext,
                                         SemanticSourceEnum::ASR, _lingDb);
+
+  if (memoryOperation::categorize(*semExp) == SemanticExpressionCategory::QUESTION)
+  {
+    pLlmAnswer = true;
+    return "";
+  }
 
   memoryOperation::mergeWithContext(semExp, semMemory, _lingDb);
 
@@ -565,10 +572,18 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     std::list<std::string> references;
     std::string outAnctionId;
     std::map<std::string, std::vector<std::string>> parametersWithValues;
+    bool llmAnswer = false;
+
     auto text =
-        _operator_react(contextualAnnotation, references, pText, textLanguage, outAnctionId, parametersWithValues);
+        _operator_react_with_llm(contextualAnnotation, references, pText,
+                                 textLanguage, outAnctionId, parametersWithValues,
+                                 llmAnswer);
     bool actionHasBeenPrinted = false;
-    if (!text.empty())
+    if (llmAnswer)
+    {
+      _printChatRobotMessage("llm answer of: \"" + pText + "\"");
+    }
+    else if (!text.empty())
     {
       _printChatRobotMessage("tts: \"" + text + "\"");
       textsToSay.emplace_back(text, textLanguage);
