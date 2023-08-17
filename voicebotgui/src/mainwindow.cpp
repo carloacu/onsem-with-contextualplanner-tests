@@ -543,16 +543,14 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     auto factToAddStr = pText.substr(1, pText.size() - 1);
     _ui->textBrowser_chat_history->append("addFact: " + QString::fromUtf8(factToAddStr.c_str()));
     _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr(factToAddStr), pNow);
-    std::set<std::string> actionIdsToSkip;
-    _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
+    _proactivityFromPlanner(textsToSay, pNow);
   }
   else if (!pText.empty() && pText[0] == '-')
   {
     auto factToAddStr = pText.substr(1, pText.size() - 1);
     _ui->textBrowser_chat_history->append("removeFact: " + QString::fromUtf8(factToAddStr.c_str()));
     _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr("!" + factToAddStr), pNow);
-    std::set<std::string> actionIdsToSkip;
-    _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
+    _proactivityFromPlanner(textsToSay, pNow);
   }
   else
   {
@@ -569,7 +567,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     std::map<std::string, std::vector<std::string>> parametersWithValues;
     auto text =
         _operator_react(contextualAnnotation, references, pText, textLanguage, outAnctionId, parametersWithValues);
-    bool actinHasBeenPrinted = false;
+    bool actionHasBeenPrinted = false;
     if (!text.empty())
     {
       _printChatRobotMessage("tts: \"" + text + "\"");
@@ -609,14 +607,8 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
       _printGoalsAndFacts();
     }
 
-    if (!actinHasBeenPrinted)
-    {
-      if (contextualAnnotation != ContextualAnnotation::QUESTION)
-      {
-        std::set<std::string> actionIdsToSkip;
-        _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
-      }
-    }
+    if (!actionHasBeenPrinted && contextualAnnotation != ContextualAnnotation::QUESTION)
+      _proactivityFromPlanner(textsToSay, pNow);
   }
 
   if (_ui->checkBox_enable_tts->isChecked() && !textsToSay.empty())
@@ -625,49 +617,58 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
 
 
 void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
-                                         std::set<std::string>& pActionIdsToSkip,
                                          const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   if (_chatbotDomain && _chatbotProblem)
   {
-    auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
-    if (oneStepOfPlannerResult && pActionIdsToSkip.count(oneStepOfPlannerResult->actionInstance.actionId) == 0)
+    std::set<std::string> actionIdsToSkip;
+    while (true)
     {
-      auto actionId = oneStepOfPlannerResult->actionInstance.actionId;
-      auto itAction = _chatbotDomain->actions.find(actionId);
-      if (itAction != _chatbotDomain->actions.end())
+      auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
+      if (oneStepOfPlannerResult && actionIdsToSkip.count(oneStepOfPlannerResult->actionInstance.actionId) == 0)
       {
-        const ChatbotAction& cbAction = itAction->second;
-
-        if (!cbAction.text.empty())
+        auto actionId = oneStepOfPlannerResult->actionInstance.actionId;
+        auto itAction = _chatbotDomain->actions.find(actionId);
+        if (itAction != _chatbotDomain->actions.end())
         {
-          std::map<std::string, std::string> printableParameters;
-          _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
-          std::string text = cbAction.text;
-          cp::replaceVariables(text, printableParameters);
-          mystd::replace_all(text, " est les ", " sont les ");
+          const ChatbotAction& cbAction = itAction->second;
 
-          // notify memory of the text said
+          if (!cbAction.text.empty())
           {
-            TextProcessingContext outContext(SemanticAgentGrounding::me,
-                                             SemanticAgentGrounding::currentUser,
-                                             cbAction.language);
-            auto semExp =
-                converter::textToContextualSemExp(text, outContext,
-                                                  SemanticSourceEnum::ASR, _lingDb);
-            memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
-            memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
-          }
-          _printChatRobotMessage("tts: \"" + text + "\"");
-          pTextsToSay.emplace_back(text, cbAction.language);
-        }
-        else
-        {
-          _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr());
-        }
+            std::map<std::string, std::string> printableParameters;
+            _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
+            std::string text = cbAction.text;
+            cp::replaceVariables(text, printableParameters);
+            mystd::replace_all(text, " est les ", " sont les ");
 
-        cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, *oneStepOfPlannerResult, pNow);
+            // notify memory of the text said
+            {
+              TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                               SemanticAgentGrounding::currentUser,
+                                               cbAction.language);
+              auto semExp =
+                  converter::textToContextualSemExp(text, outContext,
+                                                    SemanticSourceEnum::ASR, _lingDb);
+              memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
+              memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
+            }
+            _printChatRobotMessage("tts: \"" + text + "\"");
+            pTextsToSay.emplace_back(text, cbAction.language);
+          }
+          else
+          {
+            _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr());
+          }
+
+          cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, *oneStepOfPlannerResult, pNow);
+
+          if (cbAction.potentialEffect && !cbAction.effect)
+            break;
+          actionIdsToSkip.insert(oneStepOfPlannerResult->actionInstance.actionId);
+          continue;
+        }
       }
+      break;
     }
     _printGoalsAndFacts();
   }
@@ -1203,8 +1204,7 @@ void MainWindow::_printGoalsAndFacts()
 void MainWindow::_proactivelyAskThePlanner(const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   std::list<TextWithLanguage> textsToSay;
-  std::set<std::string> actionIdsToSkip;
-  _proactivityFromPlanner(textsToSay, actionIdsToSkip, pNow);
+  _proactivityFromPlanner(textsToSay, pNow);
   if (_ui->checkBox_enable_tts->isChecked() && !textsToSay.empty())
     _sayText(textsToSay);
 }
