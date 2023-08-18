@@ -178,7 +178,8 @@ private:
       const SemanticExpression& pSemExp,
       SemanticLanguageEnum& pTextLanguage,
       std::string& pOutAnctionId,
-      std::map<std::string, std::vector<std::string>>& pParameters);
+      std::map<std::string, std::vector<std::string>>& pParameters,
+      std::string& pGoalToRemove);
 
   std::string _operator_react(
       ContextualAnnotation& pContextualAnnotation,

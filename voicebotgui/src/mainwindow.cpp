@@ -19,6 +19,7 @@
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semantictimegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticstatementgrounding.hpp>
 #include <onsem/texttosemantic/tool/semexpgetter.hpp>
+#include <onsem/texttosemantic/tool/semexpmodifier.hpp>
 #include <onsem/texttosemantic/languagedetector.hpp>
 #include <onsem/semantictotext/triggers.hpp>
 #include <onsem/semantictotext/tool/semexpcomparator.hpp>
@@ -537,7 +538,8 @@ void MainWindow::_operator_match(
     const SemanticExpression& pSemExp,
     SemanticLanguageEnum& pTextLanguage,
     std::string& pOutAnctionId,
-    std::map<std::string, std::vector<std::string>>& pParameters)
+    std::map<std::string, std::vector<std::string>>& pParameters,
+    std::string& pGoalToRemove)
 {
   auto& semMemory = *_semMemoryPtr;
   mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
@@ -556,8 +558,15 @@ void MainWindow::_operator_match(
 
   if (executionDataOutputter.rootExecutionData.resource)
   {
-    pOutAnctionId = executionDataOutputter.rootExecutionData.resource->value;
-    pParameters = executionDataOutputter.rootExecutionData.resourceParameters;
+    if (executionDataOutputter.rootExecutionData.resource->label == "action")
+    {
+      pOutAnctionId = executionDataOutputter.rootExecutionData.resource->value;
+      pParameters = executionDataOutputter.rootExecutionData.resourceParameters;
+    }
+    else if (executionDataOutputter.rootExecutionData.resource->label == "removeGoal")
+    {
+      pGoalToRemove = executionDataOutputter.rootExecutionData.resource->value;
+    }
   }
 }
 
@@ -639,10 +648,15 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     if (textLanguage == SemanticLanguageEnum::UNKNOWN)
       textLanguage = semMemory.defaultLanguage;
 
+    std::string goalToRemove;
     _operator_match(contextualAnnotation, references, *semExp,
-                    textLanguage, outAnctionId, parametersWithValues);
+                    textLanguage, outAnctionId, parametersWithValues, goalToRemove);
 
-    if (!outAnctionId.empty())
+    if (!goalToRemove.empty())
+    {
+      _chatbotProblem->problem.removeGoals(goalToRemove, pNow);
+    }
+    else if (!outAnctionId.empty())
     {
       auto itAction = _chatbotDomain->actions.find(outAnctionId);
       if (itAction != _chatbotDomain->actions.end())
@@ -681,6 +695,16 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
           for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
             for (const auto& currGoal : currGoalWithPririty.second)
               _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
+
+          // Add triggers to remove the goal
+          // TODO: track the goal life to remove this trigger
+          UniqueSemanticExpression invertedSemExp = semExp->clone();
+          SemExpModifier::invertPolarity(*invertedSemExp);
+          auto outputResourceGrdExp =
+              std::make_unique<GroundedExpression>(
+                converter::createResourceWithParameters("removeGoal", intentionNaturalLanguage, {},
+                                                        *invertedSemExp, _lingDb, textLanguage));
+          triggers::add(std::move(invertedSemExp), std::move(outputResourceGrdExp), semMemory, _lingDb);
         }
       }
       _printGoalsAndFacts();
