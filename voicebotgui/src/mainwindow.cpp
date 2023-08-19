@@ -13,6 +13,7 @@
 #include <contextualplanner/util/replacevariables.hpp>
 #include <onsem/common/utility/string.hpp>
 #include <onsem/common/utility/uppercasehandler.hpp>
+#include <onsem/texttosemantic/dbtype/semanticexpression/feedbackexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/groundedexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/listexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticlanguagegrounding.hpp>
@@ -107,29 +108,51 @@ std::string _imperativeToMandatory(const SemanticExpression& pSemExp,
   return _semExptoStr(*semExpCopied, pLanguage, pMemory, pLingDb);
 }
 
-void _imperativeToIndicativeSemExp(SemanticExpression& pSemExp)
+void _imperativeToIndicativeSemExp(SemanticExpression& pSemExp,
+                                   bool pNegated)
 {
   auto* grdExpPtr = pSemExp.getGrdExpPtr_SkipWrapperPtrs();
   if (grdExpPtr != nullptr)
   {
     auto* statGrdPtr = grdExpPtr->grounding().getStatementGroundingPtr();
     if (statGrdPtr != nullptr)
+    {
       statGrdPtr->requests.erase(SemanticRequestType::ACTION);
+    }
+    if (pNegated)
+      SemExpModifier::invertPolarityFromGrdExp(*grdExpPtr);
   }
 
   auto* listExpPtr = pSemExp.getListExpPtr_SkipWrapperPtrs();
   if (listExpPtr != nullptr)
     for (auto& currElt : listExpPtr->elts)
-      _imperativeToIndicativeSemExp(*currElt);
+      _imperativeToIndicativeSemExp(*currElt, pNegated);
+}
+
+UniqueSemanticExpression _sayOk()
+{
+  return std::make_unique<GroundedExpression>
+      ([]()
+  {
+    auto okGrounding = std::make_unique<SemanticGenericGrounding>();
+    okGrounding->word.language = SemanticLanguageEnum::ENGLISH;
+    okGrounding->word.lemma = "ok";
+    okGrounding->word.partOfSpeech = PartOfSpeech::ADVERB; // TODO: check that this meaning exists
+    return okGrounding;
+  }());
 }
 
 std::string _imperativeToIndicative(const SemanticExpression& pSemExp,
                                     SemanticLanguageEnum pLanguage,
                                     SemanticMemory& pMemory,
+                                    bool pNegated,
+                                    bool pAddFeedback,
                                     const linguistics::LinguisticDatabase& pLingDb)
 {
   UniqueSemanticExpression semExpCopied = pSemExp.clone();
-  _imperativeToIndicativeSemExp(*semExpCopied);
+  _imperativeToIndicativeSemExp(*semExpCopied, pNegated);
+  if (pAddFeedback)
+    semExpCopied = std::make_unique<FeedbackExpression>(_sayOk(), std::move(semExpCopied));
   return _semExptoStr(*semExpCopied, pLanguage, pMemory, pLingDb);
 }
 
@@ -655,6 +678,13 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     if (!goalToRemove.empty())
     {
       _chatbotProblem->problem.removeGoals(goalToRemove, pNow);
+
+      auto itRemovalConf = _chatbotProblem->goalToRemovalConfirmation.find(goalToRemove);
+      if (itRemovalConf != _chatbotProblem->goalToRemovalConfirmation.end())
+      {
+        _printChatRobotMessage("tts: \"" + itRemovalConf->second + "\"");
+        textsToSay.emplace_back(itRemovalConf->second, textLanguage);
+      }
     }
     else if (!outAnctionId.empty())
     {
@@ -695,6 +725,9 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
           for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
             for (const auto& currGoal : currGoalWithPririty.second)
               _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
+
+          _chatbotProblem->goalToRemovalConfirmation[intentionNaturalLanguage] =
+              _imperativeToIndicative(*semExp, textLanguage, semMemory, true, true, _lingDb);
 
           // Add triggers to remove the goal
           // TODO: track the goal life to remove this trigger

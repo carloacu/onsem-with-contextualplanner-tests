@@ -45,6 +45,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotProblem
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
   cp::Problem problem{};
   std::map<std::string, std::string> variables{};
+  std::map<std::string, std::string> goalToRemovalConfirmation{};
 };
 
 
