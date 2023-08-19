@@ -17,6 +17,7 @@
 #include <onsem/texttosemantic/dbtype/semanticexpression/groundedexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/listexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/metadataexpression.hpp>
+#include <onsem/texttosemantic/dbtype/semanticgrounding/semanticconceptualgrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticlanguagegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semantictimegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticstatementgrounding.hpp>
@@ -157,6 +158,26 @@ std::string _imperativeToIndicative(const SemanticExpression& pSemExp,
   return _semExptoStr(*semExpCopied, pLanguage, pMemory, pLingDb);
 }
 
+
+std::string _mergeFactAndReason(std::string& pFact,
+                                std::string& pReason)
+{
+  onsem::lowerCaseFirstLetter(pReason);
+  if (pFact[pFact.size() - 1] == '.')
+    pFact = pFact.substr(0, pFact.size() - 1);
+  if (pFact[pFact.size() - 1] == '!')
+    pFact = pFact.substr(0, pFact.size() - 1);
+  if (pFact[pFact.size() - 1] == ' ')
+    pFact = pFact.substr(0, pFact.size() - 1);
+  return pFact + " parce que " + pReason;
+}
+
+std::string _mergeFactAndReasonConst(std::string& pFact,
+                                     const std::string& pReason)
+{
+  auto reason = pReason;
+  return _mergeFactAndReason(pFact, reason);
+}
 
 }
 
@@ -676,6 +697,8 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     _operator_match(contextualAnnotation, references, *semExp,
                     textLanguage, outAnctionId, parametersWithValues, goalToRemove);
 
+    auto inputCategory = memoryOperation::categorize(*semExp);
+
     if (!goalToRemove.empty())
     {
       if (_chatbotProblem->problem.removeGoals(goalToRemove, pNow))
@@ -700,8 +723,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
 
         // notify memory of the text said
         if (!text.empty())
-          _saySemExp(text, actionDescription, textsToSay,
-                     _chatbotProblem->variables, textLanguage);
+          _saySemExp(text, actionDescription, textsToSay, _chatbotProblem->variables, textLanguage);
 
         std::map<std::string, std::string> parameters;
         _convertParameters(parameters, parametersWithValues);
@@ -717,6 +739,35 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
           for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
             for (const auto& currGoal : currGoalWithPririty.second)
               _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
+
+          auto* goalPtr = _chatbotProblem->problem.getCurrentGoalPtr();
+          if (goalPtr == nullptr || goalPtr->getGoalGroupId() != intentionNaturalLanguage)
+          {
+            std::string sayIWillDoItAfter;
+            if (inputCategory == SemanticExpressionCategory::COMMAND)
+            {
+              UniqueSemanticExpression inSemExp = semExp->clone();
+              _imperativeToIndicativeSemExp(*inSemExp, false);
+              SemExpModifier::modifyVerbTenseOfSemExp(*inSemExp, SemanticVerbTense::FUTURE);
+              auto* inGrdExpPtr = inSemExp->getGrdExpPtr_SkipWrapperPtrs();
+              if (inGrdExpPtr != nullptr)
+              {
+                SemExpModifier::addChild(*inGrdExpPtr, GrammaticalType::TIME,
+                                         std::make_unique<GroundedExpression>(std::make_unique<SemanticConceptualGrounding>("time_relative_after")));
+                sayIWillDoItAfter = _semExptoStr(*inSemExp, textLanguage, *_semMemoryPtr, _lingDb);
+              }
+            }
+
+            if (sayIWillDoItAfter.empty())
+              sayIWillDoItAfter = "D'accord, je le ferai plus tard";
+            auto itIntention = _chatbotProblem->variables.find("intention");
+            if (itIntention != _chatbotProblem->variables.end())
+              sayIWillDoItAfter = _mergeFactAndReasonConst(sayIWillDoItAfter, itIntention->second);
+            else
+              sayIWillDoItAfter += " parce que je fais autre chose.";
+            _printChatRobotMessage("tts: \"" + sayIWillDoItAfter + "\"");
+            textsToSay.emplace_back(sayIWillDoItAfter, textLanguage);
+          }
 
           _chatbotProblem->goalToRemovalConfirmation[intentionNaturalLanguage] =
               _imperativeToIndicative(*semExp, textLanguage, semMemory, true, true, _lingDb);
@@ -736,7 +787,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     }
     else
     {
-      if (memoryOperation::categorize(*semExp) == SemanticExpressionCategory::QUESTION)
+      if (inputCategory == SemanticExpressionCategory::QUESTION)
       {
         _printChatRobotMessage("llm answer of: \"" + pText + "\"");
         return;
@@ -1365,10 +1416,7 @@ void MainWindow::_printGoalsAndFacts()
     auto currentAction = _chatbotProblem->variables["currentAction"];
     if (!currentAction.empty())
     {
-      onsem::lowerCaseFirstLetter(mainGoal);
-      if (currentAction[currentAction.size() - 1] == '.')
-        currentAction = currentAction.substr(0, currentAction.size() - 1);
-      _chatbotProblem->variables["currentActionWithIntention"] = currentAction + " parce que " + mainGoal;
+      _chatbotProblem->variables["currentActionWithIntention"] =  _mergeFactAndReason(currentAction, mainGoal);
     }
     else
     {
