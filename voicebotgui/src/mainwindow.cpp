@@ -16,6 +16,7 @@
 #include <onsem/texttosemantic/dbtype/semanticexpression/feedbackexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/groundedexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/listexpression.hpp>
+#include <onsem/texttosemantic/dbtype/semanticexpression/metadataexpression.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticlanguagegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semantictimegrounding.hpp>
 #include <onsem/texttosemantic/dbtype/semanticgrounding/semanticstatementgrounding.hpp>
@@ -677,13 +678,14 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
 
     if (!goalToRemove.empty())
     {
-      _chatbotProblem->problem.removeGoals(goalToRemove, pNow);
-
-      auto itRemovalConf = _chatbotProblem->goalToRemovalConfirmation.find(goalToRemove);
-      if (itRemovalConf != _chatbotProblem->goalToRemovalConfirmation.end())
+      if (_chatbotProblem->problem.removeGoals(goalToRemove, pNow))
       {
-        _printChatRobotMessage("tts: \"" + itRemovalConf->second + "\"");
-        textsToSay.emplace_back(itRemovalConf->second, textLanguage);
+        auto itRemovalConf = _chatbotProblem->goalToRemovalConfirmation.find(goalToRemove);
+        if (itRemovalConf != _chatbotProblem->goalToRemovalConfirmation.end())
+        {
+          _printChatRobotMessage("tts: \"" + itRemovalConf->second + "\"");
+          textsToSay.emplace_back(itRemovalConf->second, textLanguage);
+        }
       }
     }
     else if (!outAnctionId.empty())
@@ -694,28 +696,18 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
         const ChatbotAction& cbAction = itAction->second;
         std::string text = cbAction.text;
 
+        auto actionDescription = cbAction.description;
+
         // notify memory of the text said
         if (!text.empty())
-        {
-          cp::replaceVariables(text, _chatbotProblem->variables);
-          _printChatRobotMessage("tts: \"" + text + "\"");
-          textsToSay.emplace_back(text, textLanguage);
-          TextProcessingContext outContext(SemanticAgentGrounding::me,
-                                           SemanticAgentGrounding::currentUser,
-                                           cbAction.language);
-          auto semExp =
-              converter::textToContextualSemExp(text, outContext,
-                                                SemanticSourceEnum::ASR, _lingDb);
-          memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
-          memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
-        }
+          _saySemExp(text, actionDescription, textsToSay,
+                     _chatbotProblem->variables, textLanguage);
 
         std::map<std::string, std::string> parameters;
         _convertParameters(parameters, parametersWithValues);
         if (cbAction.effect)
           _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
 
-        auto actionDescription = cbAction.description;
         cp::replaceVariables(actionDescription, parameters);
         _chatbotProblem->variables["currentAction"] = actionDescription;
 
@@ -786,32 +778,18 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 
           std::map<std::string, std::string> printableParameters;
           _convertToParametersPrintable(printableParameters, oneStepOfPlannerResult->actionInstance.parameters);
+
+          auto actionDescription = cbAction.description;
           if (!cbAction.text.empty())
           {
             std::string text = cbAction.text;
-            cp::replaceVariables(text, printableParameters);
-            mystd::replace_all(text, " est les ", " sont les ");
-
-            // notify memory of the text said
-            {
-              TextProcessingContext outContext(SemanticAgentGrounding::me,
-                                               SemanticAgentGrounding::currentUser,
-                                               cbAction.language);
-              auto semExp =
-                  converter::textToContextualSemExp(text, outContext,
-                                                    SemanticSourceEnum::ASR, _lingDb);
-              memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
-              memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
-            }
-            _printChatRobotMessage("tts: \"" + text + "\"");
-            pTextsToSay.emplace_back(text, cbAction.language);
+            _saySemExp(text, actionDescription, pTextsToSay, printableParameters, cbAction.language);
           }
           else
           {
             _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr());
           }
 
-          auto actionDescription = cbAction.description;
           cp::replaceVariables(actionDescription, printableParameters);
           _chatbotProblem->variables["currentAction"] = actionDescription;
 
@@ -834,6 +812,40 @@ void MainWindow::_printChatRobotMessage(const std::string& pText)
 {
   _ui->textBrowser_chat_history->setTextColor(_outFontColor);
   _ui->textBrowser_chat_history->append(QString::fromUtf8(pText.c_str()));
+}
+
+void MainWindow::_saySemExp(std::string& pText,
+                            std::string& pActionDescription,
+                            std::list<TextWithLanguage>& pTextsToSay,
+                            const std::map<std::string, std::string>& pVariables,
+                            SemanticLanguageEnum pLanguage)
+{
+  cp::replaceVariables(pText, pVariables);
+  mystd::replace_all(pText, " est les ", " sont les ");
+
+  TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                   SemanticAgentGrounding::currentUser,
+                                   pLanguage);
+  auto from = SemanticSourceEnum::ASR;
+  auto semExp =
+      converter::textToContextualSemExp(pText, outContext, from, _lingDb);
+  memoryOperation::mergeWithContext(semExp, *_semMemoryPtr, _lingDb);
+  if (pActionDescription.empty())
+  {
+    auto* metadataExpPtr = semExp->getMetadataPtr_SkipWrapperPtrs();
+    if (metadataExpPtr != nullptr && metadataExpPtr->source)
+    {
+      SemExpModifier::modifyVerbTenseOfSemExp(**metadataExpPtr->source, SemanticVerbTense::PRESENT);
+      pActionDescription = _semExptoStr(**metadataExpPtr->source, pLanguage,
+                                       *_semMemoryPtr, _lingDb);
+      // Put back the source verb tense
+      SemExpModifier::modifyVerbTenseOfSemExp(**metadataExpPtr->source, SemanticVerbTense::PUNCTUALPAST);
+    }
+  }
+  memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
+
+  _printChatRobotMessage("tts: \"" + pText + "\"");
+  pTextsToSay.emplace_back(pText, pLanguage);
 }
 
 
@@ -1354,6 +1366,8 @@ void MainWindow::_printGoalsAndFacts()
     if (!currentAction.empty())
     {
       onsem::lowerCaseFirstLetter(mainGoal);
+      if (currentAction[currentAction.size() - 1] == '.')
+        currentAction = currentAction.substr(0, currentAction.size() - 1);
       _chatbotProblem->variables["currentActionWithIntention"] = currentAction + " parce que " + mainGoal;
     }
     else
