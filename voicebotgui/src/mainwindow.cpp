@@ -576,15 +576,40 @@ void MainWindow::on_lineEdit_history_newText_returnPressed()
 }
 
 
+void MainWindow::_execDataToRaskIds(
+    std::list<RobotTaskId>& pRobotTaskIds,
+    const ExecutionData& pExecutionData)
+{
+  if (pExecutionData.resource)
+  {
+    RobotTaskId newTaskId;
+    if (pExecutionData.resource->label == "action")
+    {
+      newTaskId.outAnctionId = pExecutionData.resource->value;
+      newTaskId.parameters = pExecutionData.resourceParameters;
+    }
+    else if (pExecutionData.resource->label == "removeGoal")
+    {
+      newTaskId.goalToRemove = pExecutionData.resource->value;
+    }
+    pRobotTaskIds.emplace_back(std::move(newTaskId));
+  }
+
+  for (auto& currElt : pExecutionData.toRunSequencially)
+    _execDataToRaskIds(pRobotTaskIds, currElt);
+  for (auto& currElt : pExecutionData.toRunInParallel)
+    _execDataToRaskIds(pRobotTaskIds, currElt);
+  for (auto& currElt : pExecutionData.toRunInBackground)
+    _execDataToRaskIds(pRobotTaskIds, currElt);
+}
+
 
 void MainWindow::_operator_match(
     ContextualAnnotation& pContextualAnnotation,
     std::list<std::string>& pReferences,
     const SemanticExpression& pSemExp,
     SemanticLanguageEnum& pTextLanguage,
-    std::string& pOutAnctionId,
-    std::map<std::string, std::vector<std::string>>& pParameters,
-    std::string& pGoalToRemove)
+    std::list<RobotTaskId>& pRobotTaskIds)
 {
   auto& semMemory = *_semMemoryPtr;
   mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
@@ -600,21 +625,31 @@ void MainWindow::_operator_match(
   OutputterContext outputterContext(outContext);
   ExecutionDataOutputter executionDataOutputter(semMemory, _lingDb);
   executionDataOutputter.processSemExp(**reaction, outputterContext);
-
-  if (executionDataOutputter.rootExecutionData.resource)
-  {
-    if (executionDataOutputter.rootExecutionData.resource->label == "action")
-    {
-      pOutAnctionId = executionDataOutputter.rootExecutionData.resource->value;
-      pParameters = executionDataOutputter.rootExecutionData.resourceParameters;
-    }
-    else if (executionDataOutputter.rootExecutionData.resource->label == "removeGoal")
-    {
-      pGoalToRemove = executionDataOutputter.rootExecutionData.resource->value;
-    }
-  }
+  _execDataToRaskIds(pRobotTaskIds, executionDataOutputter.rootExecutionData);
 }
 
+void MainWindow::_operator_resolveCommand(
+    ContextualAnnotation& pContextualAnnotation,
+    std::list<std::string>& pReferences,
+    const SemanticExpression& pSemExp,
+    SemanticLanguageEnum& pTextLanguage,
+    std::list<RobotTaskId>& pRobotTaskIds)
+{
+  auto& semMemory = *_semMemoryPtr;
+  auto reaction = memoryOperation::resolveCommand(pSemExp, semMemory, _lingDb);
+  if (!reaction)
+    return;
+  pContextualAnnotation = SemExpGetter::extractContextualAnnotation(**reaction);
+  SemExpGetter::extractReferences(pReferences, **reaction);
+
+  TextProcessingContext outContext(SemanticAgentGrounding::me,
+                                   SemanticAgentGrounding::currentUser,
+                                   pTextLanguage);
+  OutputterContext outputterContext(outContext);
+  ExecutionDataOutputter executionDataOutputter(semMemory, _lingDb);
+  executionDataOutputter.processSemExp(**reaction, outputterContext);
+  _execDataToRaskIds(pRobotTaskIds, executionDataOutputter.rootExecutionData);
+}
 
 std::string MainWindow::_operator_react(
     ContextualAnnotation& pContextualAnnotation,
@@ -676,8 +711,6 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     auto contextualAnnotation = ContextualAnnotation::ANSWER;
 
     std::list<std::string> references;
-    std::string outAnctionId;
-    std::map<std::string, std::vector<std::string>> parametersWithValues;
 
     auto& semMemory = *_semMemoryPtr;
     auto textLanguage = linguistics::getLanguage(pText, _lingDb);
@@ -693,97 +726,108 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
     if (textLanguage == SemanticLanguageEnum::UNKNOWN)
       textLanguage = semMemory.defaultLanguage;
 
-    std::string goalToRemove;
+    std::list<RobotTaskId> robotTaskIds;
     _operator_match(contextualAnnotation, references, *semExp,
-                    textLanguage, outAnctionId, parametersWithValues, goalToRemove);
+                    textLanguage, robotTaskIds);
+
+    if (robotTaskIds.empty())
+      _operator_resolveCommand(contextualAnnotation, references, *semExp,
+                               textLanguage, robotTaskIds);
 
     auto inputCategory = memoryOperation::categorize(*semExp);
 
-    if (!goalToRemove.empty())
+    if (!robotTaskIds.empty())
     {
-      if (_chatbotProblem->problem.removeGoals(goalToRemove, pNow))
+      for (auto& currRobotTaskId : robotTaskIds)
       {
-        auto itRemovalConf = _chatbotProblem->goalToRemovalConfirmation.find(goalToRemove);
-        if (itRemovalConf != _chatbotProblem->goalToRemovalConfirmation.end())
+        if (!currRobotTaskId.goalToRemove.empty())
         {
-          _printChatRobotMessage("tts: \"" + itRemovalConf->second + "\"");
-          textsToSay.emplace_back(itRemovalConf->second, textLanguage);
-        }
-      }
-    }
-    else if (!outAnctionId.empty())
-    {
-      auto itAction = _chatbotDomain->actions.find(outAnctionId);
-      if (itAction != _chatbotDomain->actions.end())
-      {
-        const ChatbotAction& cbAction = itAction->second;
-        std::string text = cbAction.text;
-
-        auto actionDescription = cbAction.description;
-
-        // notify memory of the text said
-        if (!text.empty())
-          _saySemExp(text, actionDescription, textsToSay, _chatbotProblem->variables, textLanguage);
-
-        std::map<std::string, std::string> parameters;
-        _convertParameters(parameters, parametersWithValues);
-        if (cbAction.effect)
-          _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
-
-        cp::replaceVariables(actionDescription, parameters);
-        _chatbotProblem->variables["currentAction"] = actionDescription;
-
-        if (!cbAction.goalsToAdd.empty())
-        {
-          auto intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
-          for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
-            for (const auto& currGoal : currGoalWithPririty.second)
-              _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
-
-          auto* goalPtr = _chatbotProblem->problem.getCurrentGoalPtr();
-          if (goalPtr == nullptr || goalPtr->getGoalGroupId() != intentionNaturalLanguage)
+          if (_chatbotProblem->problem.removeGoals(currRobotTaskId.goalToRemove, pNow))
           {
-            std::string sayIWillDoItAfter;
-            if (inputCategory == SemanticExpressionCategory::COMMAND)
+            auto itRemovalConf = _chatbotProblem->goalToRemovalConfirmation.find(currRobotTaskId.goalToRemove);
+            if (itRemovalConf != _chatbotProblem->goalToRemovalConfirmation.end())
             {
-              UniqueSemanticExpression inSemExp = semExp->clone();
-              _imperativeToIndicativeSemExp(*inSemExp, false);
-              SemExpModifier::modifyVerbTenseOfSemExp(*inSemExp, SemanticVerbTense::FUTURE);
-              auto* inGrdExpPtr = inSemExp->getGrdExpPtr_SkipWrapperPtrs();
-              if (inGrdExpPtr != nullptr)
-              {
-                SemExpModifier::addChild(*inGrdExpPtr, GrammaticalType::TIME,
-                                         std::make_unique<GroundedExpression>(std::make_unique<SemanticConceptualGrounding>("time_relative_after")));
-                sayIWillDoItAfter = _semExptoStr(*inSemExp, textLanguage, *_semMemoryPtr, _lingDb);
-              }
+              _printChatRobotMessage("tts: \"" + itRemovalConf->second + "\"");
+              textsToSay.emplace_back(itRemovalConf->second, textLanguage);
             }
-
-            if (sayIWillDoItAfter.empty())
-              sayIWillDoItAfter = "D'accord, je le ferai plus tard";
-            auto itIntention = _chatbotProblem->variables.find("intention");
-            if (itIntention != _chatbotProblem->variables.end())
-              sayIWillDoItAfter = _mergeFactAndReasonConst(sayIWillDoItAfter, itIntention->second);
-            else
-              sayIWillDoItAfter += " parce que je fais autre chose.";
-            _printChatRobotMessage("tts: \"" + sayIWillDoItAfter + "\"");
-            textsToSay.emplace_back(sayIWillDoItAfter, textLanguage);
           }
+        }
+        else if (!currRobotTaskId.outAnctionId.empty())
+        {
+          auto itAction = _chatbotDomain->actions.find(currRobotTaskId.outAnctionId);
+          if (itAction != _chatbotDomain->actions.end())
+          {
+            const ChatbotAction& cbAction = itAction->second;
+            std::string text = cbAction.text;
 
-          _chatbotProblem->goalToRemovalConfirmation[intentionNaturalLanguage] =
-              _imperativeToIndicative(*semExp, textLanguage, semMemory, true, true, _lingDb);
+            auto actionDescription = cbAction.description;
 
-          // Add triggers to remove the goal
-          // TODO: track the goal life to remove this trigger
-          UniqueSemanticExpression invertedSemExp = semExp->clone();
-          SemExpModifier::invertPolarity(*invertedSemExp);
-          auto outputResourceGrdExp =
-              std::make_unique<GroundedExpression>(
-                converter::createResourceWithParameters("removeGoal", intentionNaturalLanguage, {},
-                                                        *invertedSemExp, _lingDb, textLanguage));
-          triggers::add(std::move(invertedSemExp), std::move(outputResourceGrdExp), semMemory, _lingDb);
+            // notify memory of the text said
+            if (!text.empty())
+              _saySemExp(text, actionDescription, textsToSay, _chatbotProblem->variables, textLanguage);
+
+            std::map<std::string, std::string> parameters;
+            _convertParameters(parameters, currRobotTaskId.parameters);
+            if (cbAction.effect)
+              _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
+
+            cp::replaceVariables(actionDescription, parameters);
+            _chatbotProblem->variables["currentAction"] = actionDescription;
+
+            if (!cbAction.goalsToAdd.empty())
+            {
+              auto intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
+              for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
+                for (const auto& currGoal : currGoalWithPririty.second)
+                  _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
+
+              auto* goalPtr = _chatbotProblem->problem.getCurrentGoalPtr();
+              if (goalPtr == nullptr || goalPtr->getGoalGroupId() != intentionNaturalLanguage)
+              {
+                std::string sayIWillDoItAfter;
+                if (inputCategory == SemanticExpressionCategory::COMMAND)
+                {
+                  UniqueSemanticExpression inSemExp = semExp->clone();
+                  _imperativeToIndicativeSemExp(*inSemExp, false);
+                  SemExpModifier::modifyVerbTenseOfSemExp(*inSemExp, SemanticVerbTense::FUTURE);
+                  auto* inGrdExpPtr = inSemExp->getGrdExpPtr_SkipWrapperPtrs();
+                  if (inGrdExpPtr != nullptr)
+                  {
+                    SemExpModifier::addChild(*inGrdExpPtr, GrammaticalType::TIME,
+                                             std::make_unique<GroundedExpression>(std::make_unique<SemanticConceptualGrounding>("time_relative_later")));
+                    sayIWillDoItAfter = _semExptoStr(*inSemExp, textLanguage, *_semMemoryPtr, _lingDb);
+                  }
+                }
+
+                if (sayIWillDoItAfter.empty())
+                  sayIWillDoItAfter = "D'accord, je le ferai plus tard";
+                auto itIntention = _chatbotProblem->variables.find("intention");
+                if (itIntention != _chatbotProblem->variables.end())
+                  sayIWillDoItAfter = _mergeFactAndReasonConst(sayIWillDoItAfter, itIntention->second);
+                else
+                  sayIWillDoItAfter += " parce que je fais autre chose.";
+                _printChatRobotMessage("tts: \"" + sayIWillDoItAfter + "\"");
+                textsToSay.emplace_back(sayIWillDoItAfter, textLanguage);
+              }
+
+              _chatbotProblem->goalToRemovalConfirmation[intentionNaturalLanguage] =
+                  _imperativeToIndicative(*semExp, textLanguage, semMemory, true, true, _lingDb);
+
+              // Add triggers to remove the goal
+              // TODO: track the goal life to remove this trigger
+              UniqueSemanticExpression invertedSemExp = semExp->clone();
+              SemExpModifier::invertPolarity(*invertedSemExp);
+              auto outputResourceGrdExp =
+                  std::make_unique<GroundedExpression>(
+                    converter::createResourceWithParameters("removeGoal", intentionNaturalLanguage, {},
+                                                            *invertedSemExp, _lingDb, textLanguage));
+
+              triggers::add(std::move(invertedSemExp), std::move(outputResourceGrdExp), semMemory, _lingDb);
+            }
+          }
+          _printGoalsAndFacts();
         }
       }
-      _printGoalsAndFacts();
     }
     else
     {
@@ -801,7 +845,8 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
       }
     }
 
-    if (contextualAnnotation != ContextualAnnotation::QUESTION)
+    if (contextualAnnotation != ContextualAnnotation::QUESTION &&
+        contextualAnnotation != ContextualAnnotation::TEACHINGFEEDBACK)
       _proactivityFromPlanner(textsToSay, pNow);
   }
 

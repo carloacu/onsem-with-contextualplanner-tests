@@ -255,6 +255,16 @@ void addChatbotDomaintoASemanticMemory(
           std::make_unique<GroundedExpression>(
             converter::createResourceWithParameters("action", currActionWithId.first, parameterLabelToQuestionsStrs,
                                                     *triggerSemExp, pLingDb, currAction.language));
+
+      auto infinitiveActionSemExp = converter::imperativeToInfinitive(*triggerSemExp);
+      if (infinitiveActionSemExp)
+      {
+        mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
+        memoryOperation::teachSplitted(reaction, pSemanticMemory,
+                                       (*infinitiveActionSemExp)->clone(), outputResourceGrdExp->clone(),
+                                       pLingDb, memoryOperation::SemanticActionOperatorEnum::BEHAVIOR);
+      }
+
       triggers::add(std::move(triggerSemExp), std::move(outputResourceGrdExp), pSemanticMemory, pLingDb);
     }
 

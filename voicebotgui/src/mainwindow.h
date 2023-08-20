@@ -13,6 +13,7 @@
 #include <onsem/common/enum/contextualannotation.hpp>
 #include <onsem/common/keytostreams.hpp>
 #include <onsem/texttosemantic/dbtype/linguisticdatabase.hpp>
+#include <onsem/semantictotext/outputter/executiondataoutputter.hpp>
 #include <onsem/tester/sentencesloader.hpp>
 #include <onsem/tester/scenariocontainer.hpp>
 #include <contextualplanner/contextualplanner.hpp>
@@ -103,16 +104,12 @@ private Q_SLOTS:
   void on_actionSet_problem_triggered();
 
 private:
-  /*
-  struct ChatbotSemExpParam
+  struct RobotTaskId
   {
-    std::string urlizeInput{};
-    UniqueSemanticExpression semExp{};
-    UniqueSemanticExpression semExpMergedWithContext{};
-    cp::SetOfFacts effect{};
-    std::vector<cp::Goal> goalsToAdd{};
+    std::string outAnctionId;
+    std::map<std::string, std::vector<std::string>> parameters;
+    std::string goalToRemove;
   };
-  */
   struct TextWithLanguage
   {
     TextWithLanguage(const std::string& pText,
@@ -172,14 +169,22 @@ private:
   void _loadSentences(bool pTxtFirstChoice,
                       const std::string& pTextCorpusPath);
 
+  void _execDataToRaskIds(
+      std::list<RobotTaskId>& pRobotTaskIds,
+      const ExecutionData& pExecutionData);
   void _operator_match(
       ContextualAnnotation& pContextualAnnotation,
       std::list<std::string>& pReferences,
       const SemanticExpression& pSemExp,
       SemanticLanguageEnum& pTextLanguage,
-      std::string& pOutAnctionId,
-      std::map<std::string, std::vector<std::string>>& pParameters,
-      std::string& pGoalToRemove);
+      std::list<RobotTaskId>& pRobotTaskIds);
+
+  void _operator_resolveCommand(
+      ContextualAnnotation& pContextualAnnotation,
+      std::list<std::string>& pReferences,
+      const SemanticExpression& pSemExp,
+      SemanticLanguageEnum& pTextLanguage,
+      std::list<RobotTaskId>& pRobotTaskIds);
 
   std::string _operator_react(
       ContextualAnnotation& pContextualAnnotation,
