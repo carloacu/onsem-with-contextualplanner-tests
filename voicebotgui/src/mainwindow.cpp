@@ -59,13 +59,19 @@ void _convertParameters(
         const std::map<std::string, std::vector<std::string>>& pInParameters)
 {
   for (auto& currParamWithValues : pInParameters)
-  {
     if (!currParamWithValues.second.empty())
-    {
-      auto paramValue = currParamWithValues.second[0];
-      mystd::replace_all(paramValue, " ", "_");
-      pOutParameters[currParamWithValues.first] = paramValue;
-    }
+      pOutParameters[currParamWithValues.first] = currParamWithValues.second[0];
+}
+
+void _convertToParametersForFacts(
+        std::map<std::string, std::string>& pOutParameters,
+        const std::map<std::string, std::string>& pInParameters)
+{
+  for (auto& currParam : pInParameters)
+  {
+    auto newParam = currParam.second;
+    mystd::replace_all(newParam, " ", "_");
+    pOutParameters[currParam.first] = newParam;
   }
 }
 
@@ -773,17 +779,24 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
             if (!text.empty())
               _saySemExp(text, actionDescription, textsToSay, _chatbotProblem->variables, textLanguage);
 
+            std::map<std::string, std::string> printTableParameters;
+            _convertParameters(printTableParameters, currRobotTaskId.parameters);
             std::map<std::string, std::string> parameters;
-            _convertParameters(parameters, currRobotTaskId.parameters);
+            _convertToParametersForFacts(parameters, printTableParameters);
             if (cbAction.effect)
               _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
 
-            cp::replaceVariables(actionDescription, parameters);
+            cp::replaceVariables(actionDescription, printTableParameters);
             _chatbotProblem->variables["currentAction"] = actionDescription;
 
             if (!cbAction.goalsToAdd.empty())
             {
-              auto intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
+              auto intentionNaturalLanguage = cbAction.goalDescription;
+              if (!intentionNaturalLanguage.empty())
+                cp::replaceVariables(intentionNaturalLanguage, printTableParameters);
+              else
+                intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
+
               for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
                 for (const auto& currGoal : currGoalWithPririty.second)
                   _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
@@ -1456,7 +1469,9 @@ void MainWindow::_printGoalsAndFacts()
     {
       if (mainGoal.empty())
         mainGoal = currGoal.getGoalGroupId();
-      ss << itGoalPrority->first << "                  ";
+      ss << itGoalPrority->first << "                 ";
+      if (itGoalPrority->first >= 10)
+        ss << " ";
       if (_showGoalFacts)
         ss << currGoal.toStr();
       else

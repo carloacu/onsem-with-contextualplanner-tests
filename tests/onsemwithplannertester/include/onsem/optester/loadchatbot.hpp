@@ -30,6 +30,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotAction
   std::unique_ptr<cp::FactModification> effect{};
   std::unique_ptr<cp::FactModification> potentialEffect{};
   std::map<int, std::vector<cp::Goal>> goalsToAdd{};
+  std::string goalDescription{};
 };
 
 struct ONSEMWITHPLANNERTESTER_API ChatbotDomain
