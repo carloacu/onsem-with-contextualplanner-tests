@@ -99,7 +99,17 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
         auto& currChatbotAction = pChatbotDomain.actions[actionId];
         currChatbotAction.language = language;
 
-        currChatbotAction.trigger = currActionTree.second.get("trigger", "");
+
+        auto singleTrigger = currActionTree.second.get("trigger", "");
+        if (!singleTrigger.empty())
+          currChatbotAction.triggers.emplace_back(singleTrigger);
+
+        auto triggersTreeOpt = currActionTree.second.get_child_optional("triggers");
+        if (triggersTreeOpt)
+          for (auto& currTriggerTree : *triggersTreeOpt)
+            currChatbotAction.triggers.emplace_back(currTriggerTree.second.get_value<std::string>());
+
+
         currChatbotAction.text = actionText;
 
         auto parametersTreeOpt = currActionTree.second.get_child_optional("parameters");
@@ -241,31 +251,35 @@ void addChatbotDomaintoASemanticMemory(
   for (const auto& currActionWithId : pChatbotDomain.actions)
   {
     const ChatbotAction& currAction = currActionWithId.second;
-    if (!currAction.trigger.empty())
+    if (!currAction.triggers.empty())
     {
       auto textProcToRobot = TextProcessingContext::getTextProcessingContextToRobot(currAction.language);
       textProcToRobot.isTimeDependent = false;
-      auto triggerSemExp = converter::textToSemExp(currAction.trigger, textProcToRobot, pLingDb);
 
       std::map<std::string, std::vector<std::string>> parameterLabelToQuestionsStrs;
       for (const auto& currParameter : currAction.parameters)
         parameterLabelToQuestionsStrs[currParameter.text] = currParameter.questions;
 
-      auto outputResourceGrdExp =
-          std::make_unique<GroundedExpression>(
-            converter::createResourceWithParameters("action", currActionWithId.first, parameterLabelToQuestionsStrs,
-                                                    *triggerSemExp, pLingDb, currAction.language));
-
-      auto infinitiveActionSemExp = converter::imperativeToInfinitive(*triggerSemExp);
-      if (infinitiveActionSemExp)
+      for (auto& currTrigger : currAction.triggers)
       {
-        mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
-        memoryOperation::teachSplitted(reaction, pSemanticMemory,
-                                       (*infinitiveActionSemExp)->clone(), outputResourceGrdExp->clone(),
-                                       pLingDb, memoryOperation::SemanticActionOperatorEnum::BEHAVIOR);
-      }
+        auto triggerSemExp = converter::textToSemExp(currTrigger, textProcToRobot, pLingDb);
 
-      triggers::add(std::move(triggerSemExp), std::move(outputResourceGrdExp), pSemanticMemory, pLingDb);
+        auto outputResourceGrdExp =
+            std::make_unique<GroundedExpression>(
+              converter::createResourceWithParameters("action", currActionWithId.first, parameterLabelToQuestionsStrs,
+                                                      *triggerSemExp, pLingDb, currAction.language));
+
+        auto infinitiveActionSemExp = converter::imperativeToInfinitive(*triggerSemExp);
+        if (infinitiveActionSemExp)
+        {
+          mystd::unique_propagate_const<UniqueSemanticExpression> reaction;
+          memoryOperation::teachSplitted(reaction, pSemanticMemory,
+                                         (*infinitiveActionSemExp)->clone(), outputResourceGrdExp->clone(),
+                                         pLingDb, memoryOperation::SemanticActionOperatorEnum::BEHAVIOR);
+        }
+
+        triggers::add(std::move(triggerSemExp), std::move(outputResourceGrdExp), pSemanticMemory, pLingDb);
+      }
     }
 
     cp::Action action(currAction.precondition ? currAction.precondition->clone() : std::unique_ptr<cp::FactCondition>(),

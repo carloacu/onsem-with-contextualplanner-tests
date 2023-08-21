@@ -21,7 +21,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotParam
 struct ONSEMWITHPLANNERTESTER_API ChatbotAction
 {
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
-  std::string trigger{};
+  std::list<std::string> triggers{};
   std::string text{};
   std::string description{};
   std::vector<ChatbotParam> parameters{};
