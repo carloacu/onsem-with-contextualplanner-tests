@@ -46,8 +46,8 @@ public:
 
 
 
-
 private Q_SLOTS:
+  void on_pushButton_goals_view_clicked();
   void on_actionload_a_smb_triggered();
   void on_actionSave_memory_triggered();
   void on_actionLoad_memory_triggered();
@@ -150,6 +150,7 @@ private:
   std::size_t _nbOfSecondToWaitAfterTtsSpeech;
   bool _asrIsWaiting;
   bool _shouldWaitForNewSpeech;
+  bool _showGoalFacts;
 
   /// Display the dot image
   onsem::SentencesLoader fSentenceLoader;

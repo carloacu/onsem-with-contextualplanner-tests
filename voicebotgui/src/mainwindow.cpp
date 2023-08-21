@@ -218,7 +218,8 @@ MainWindow::MainWindow(const std::filesystem::path& pCorpusEquivalencesFolder,
   _asrIsWaiting(true),
   _shouldWaitForNewSpeech(false),
   fSentenceLoader(),
-  _lineEditHistorical()
+  _lineEditHistorical(),
+  _showGoalFacts(true)
 {
   _ui->setupUi(this);
   resize(1267, 750);
@@ -450,29 +451,35 @@ void MainWindow::onRescaleChatPanel()
     int mainFrameY = 90;
     int asrFrameY = _ui->tab_Chat->height() - _bottomBoxHeight - 10;
     int goalsHeight = 300;
-    int goalsWidth = _ui->tab_Chat->width() / 2;
+    int goalsWidth = (_ui->tab_Chat->width() / 2) - 10;
 
     _ui->textBrowser_chat_history->setGeometry(10,
                                                mainFrameY,
                                                _ui->tab_Chat->width() - 20 - goalsWidth,
                                                asrFrameY - mainFrameY - 20);
 
-    _ui->label_goals->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+    _ui->label_goals->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                   mainFrameY,
                                   goalsWidth,
                                   _ui->label_goals->height());
 
-    _ui->textBrowser_goals->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+
+    _ui->pushButton_goals_view->setGeometry(10 + _ui->textBrowser_chat_history->width() + 130,
+                                            mainFrameY - 5,
+                                            _ui->pushButton_goals_view->width(),
+                                            _ui->pushButton_goals_view->height());
+
+    _ui->textBrowser_goals->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                         mainFrameY + 10 + _ui->label_goals->height(),
                                         goalsWidth,
                                         goalsHeight);
 
-    _ui->label_world_state->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+    _ui->label_world_state->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                   mainFrameY + goalsHeight,
                                   goalsWidth,
                                   _ui->label_world_state->height());
 
-    _ui->textBrowser_facts->setGeometry(10 + _ui->textBrowser_chat_history->width(),
+    _ui->textBrowser_facts->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                         mainFrameY + goalsHeight + 10 + _ui->label_world_state->height(),
                                         goalsWidth,
                                         asrFrameY - mainFrameY - 20  - goalsHeight);
@@ -1449,8 +1456,12 @@ void MainWindow::_printGoalsAndFacts()
     {
       if (mainGoal.empty())
         mainGoal = currGoal.getGoalGroupId();
-      ss << itGoalPrority->first << "                  "
-         << currGoal.toStr() << "\n";
+      ss << itGoalPrority->first << "                  ";
+      if (_showGoalFacts)
+        ss << currGoal.toStr();
+      else
+        ss << currGoal.getGoalGroupId();
+      ss << "\n";
     }
   }
   _chatbotProblem->variables["intention"] = mainGoal;
@@ -1497,3 +1508,10 @@ void MainWindow::_proactivelyAskThePlanner(const std::unique_ptr<std::chrono::st
   if (_ui->checkBox_enable_tts->isChecked() && !textsToSay.empty())
     _sayText(textsToSay);
 }
+
+void MainWindow::on_pushButton_goals_view_clicked()
+{
+  _showGoalFacts = !_showGoalFacts;
+  _printGoalsAndFacts();
+}
+
