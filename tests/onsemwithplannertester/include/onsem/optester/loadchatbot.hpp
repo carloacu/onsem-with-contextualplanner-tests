@@ -60,7 +60,9 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
 
 ONSEMWITHPLANNERTESTER_API
 void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
-                        std::istream& pIstream);
+                        ChatbotDomain& pChatbotDomain,
+                        std::istream& pIstream,
+                        const std::string &pPath);
 
 ONSEMWITHPLANNERTESTER_API
 void addInferencesToProblem(ChatbotProblem& pChatbotProblem,

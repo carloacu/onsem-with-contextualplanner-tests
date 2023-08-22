@@ -207,7 +207,9 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
 
 
 void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
-                        std::istream& pIstream)
+                        ChatbotDomain& pChatbotDomain,
+                        std::istream& pIstream,
+                        const std::string& pPath)
 {
   auto now = std::make_unique<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
   boost::property_tree::ptree pTree;
@@ -226,6 +228,15 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
         pChatbotProblem.language = SemanticLanguageEnum::JAPANESE;
       else
         pChatbotProblem.language = SemanticLanguageEnum::UNKNOWN;
+    }
+    else if (currChatbotAttr.first == "domains")
+    {
+      for (auto& currDomainTree : currChatbotAttr.second)
+      {
+        auto filenameStr = pPath + currDomainTree.second.get_value<std::string>();
+        std::ifstream file(filenameStr.c_str(), std::ifstream::in);
+        loadChatbotDomain(pChatbotDomain, file);
+      }
     }
     else if (currChatbotAttr.first == "facts")
     {

@@ -1465,11 +1465,17 @@ void MainWindow::on_actionSet_problem_triggered()
       (this, "Import chatbot problem", QString(), firstStr).toUtf8().constData();
   if (filenameStr.empty())
     return;
+  std::string path;
+  auto endOfPath = filenameStr.find_last_of('/');
+  if (endOfPath != std::string::npos)
+    path = filenameStr.substr(0, endOfPath + 1);
   std::ifstream file(filenameStr.c_str(), std::ifstream::in);
   _chatbotProblem = std::make_unique<ChatbotProblem>();
-  loadChatbotProblem(*_chatbotProblem, file);
-  if (_chatbotDomain)
-    addInferencesToProblem(*_chatbotProblem, _chatbotDomain->inferences);
+  if (!_chatbotDomain)
+    _chatbotDomain = std::make_unique<ChatbotDomain>();
+  loadChatbotProblem(*_chatbotProblem, *_chatbotDomain, file, path);
+  addChatbotDomaintoASemanticMemory(*_semMemoryPtr, *_chatbotDomain, _lingDb);
+  addInferencesToProblem(*_chatbotProblem, _chatbotDomain->inferences);
   _proactivelyAskThePlanner(now);
 }
 

@@ -18,7 +18,8 @@ TEST_F(OnsemWithPlannerGTests, test_loadchatbotProblem)
   ss << "}                                           \n";
 
   ChatbotProblem chatbotProblem;
-  loadChatbotProblem(chatbotProblem, ss);
+  ChatbotDomain chatbotDomain;
+  loadChatbotProblem(chatbotProblem, chatbotDomain, ss, "");
   EXPECT_EQ(SemanticLanguageEnum::FRENCH, chatbotProblem.language);
   ASSERT_EQ(1, chatbotProblem.problem.goals().size());
   EXPECT_EQ(cp::Goal("remonter-le-moral"), chatbotProblem.problem.goals().find(cp::Problem::defaultPriority)->second[0]);
