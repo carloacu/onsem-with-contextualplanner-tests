@@ -41,21 +41,50 @@ void _loadGoals(
 {
   for (auto& currGoalListTree : pTree)
   {
-    bool firstIteration = true;
+    int nbOfIteration = 0;
     int priority = 1;
+    std::string goalName;
+    std::string goalGroupId;
     for (auto& currGoalWithPriorityTree : currGoalListTree.second)
     {
-      if (firstIteration)
-      {
+      if (nbOfIteration == 0)
         priority = mystd::lexical_cast<int>(currGoalWithPriorityTree.second.get_value<std::string>());
-        firstIteration = false;
-      }
+      else if (nbOfIteration == 1)
+        goalName = currGoalWithPriorityTree.second.get_value<std::string>();
       else
-      {
-        pGoals[priority].push_back(currGoalWithPriorityTree.second.get_value<std::string>());
-      }
+        goalGroupId = currGoalWithPriorityTree.second.get_value<std::string>();
+      ++nbOfIteration;
+    }
+    if (!goalName.empty())
+      pGoals[priority].push_back(cp::Goal(goalName, -1, goalGroupId));
+  }
+}
+
+
+std::shared_ptr<cp::SetOfInferences> _loadInferences(const boost::property_tree::ptree& pTree)
+{
+  auto setOfInferences = std::make_shared<cp::SetOfInferences>();
+  std::size_t inferenceCounter = 1;
+  for (auto& currInferenceTree : pTree)
+  {
+    auto condition = cp::FactCondition::fromStr(currInferenceTree.second.get("condition", ""));
+    auto effect = cp::FactModification::fromStr(currInferenceTree.second.get("effect", ""));
+
+    if (condition && effect)
+    {
+      cp::Inference inference(std::move(condition), std::move(effect));
+
+      auto parametersTreeOpt = currInferenceTree.second.get_child_optional("parameters");
+      if (parametersTreeOpt)
+        for (auto& currParameterTree : *parametersTreeOpt)
+          inference.parameters.push_back(currParameterTree.second.get_value<std::string>());
+      std::stringstream ssId;
+      ssId << "inference" << inferenceCounter;
+      ++inferenceCounter;
+      setOfInferences->addInference(ssId.str(), inference);
     }
   }
+  return setOfInferences;
 }
 
 }
@@ -91,12 +120,14 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
     {
       for (auto& currActionTree : currChatbotAttr.second)
       {
-        cp::ActionId actionId = currActionTree.second.get("id", "");
+        auto idFromJson = currActionTree.second.get("id", "");
+        cp::ActionId actionId = idFromJson;
         std::string actionText = currActionTree.second.get("text", "");
         if (actionId.empty())
           actionId = actionText;
         actionId = newId(actionId, pChatbotDomain.actions);
         auto& currChatbotAction = pChatbotDomain.actions[actionId];
+        currChatbotAction.idFromJson = idFromJson;
         currChatbotAction.language = language;
 
 
@@ -166,6 +197,11 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
           _loadGoals(currChatbotAction.goalsToAdd, *goalsToAddTreeOpt);
       }
     }
+    else if (currChatbotAttr.first == "inferences")
+    {
+      auto setOfInferences = _loadInferences(currChatbotAttr.second);
+      pChatbotDomain.inferences.emplace_back(setOfInferences);
+    }
   }
 }
 
@@ -204,33 +240,29 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
     }
     else if (currChatbotAttr.first == "inferences")
     {
-      auto setOfInferences = std::make_shared<cp::SetOfInferences>();
-      pChatbotProblem.problem.addSetOfInferences("soi", setOfInferences);
-
-      std::size_t inferenceCounter = 1;
-      for (auto& currInferenceTree : currChatbotAttr.second)
-      {
-        auto condition = cp::FactCondition::fromStr(currInferenceTree.second.get("condition", ""));
-        auto effect = cp::FactModification::fromStr(currInferenceTree.second.get("effect", ""));
-
-        if (condition && effect)
-        {
-          cp::Inference inference(std::move(condition), std::move(effect));
-
-          auto parametersTreeOpt = currInferenceTree.second.get_child_optional("parameters");
-          if (parametersTreeOpt)
-            for (auto& currParameterTree : *parametersTreeOpt)
-              inference.parameters.push_back(currParameterTree.second.get_value<std::string>());
-          std::stringstream ssId;
-          ssId << "inference" << inferenceCounter;
-          ++inferenceCounter;
-          setOfInferences->addInference(ssId.str(), inference);
-        }
-      }
+      pChatbotProblem.setOfInferences = _loadInferences(currChatbotAttr.second);
     }
   }
 }
 
+
+void addInferencesToProblem(ChatbotProblem& pChatbotProblem,
+                            const std::list<std::shared_ptr<cp::SetOfInferences>>& pInferences)
+{
+  pChatbotProblem.problem.clearInferences();
+
+  if (pChatbotProblem.setOfInferences)
+    pChatbotProblem.problem.addSetOfInferences("soi", pChatbotProblem.setOfInferences);
+
+  int id = 1;
+  for (auto& currSetOfInferences : pInferences)
+  {
+    std::stringstream ss;
+    ss << "soi_domian_" << id;
+    ++id;
+    pChatbotProblem.problem.addSetOfInferences(ss.str(), currSetOfInferences);
+  }
+}
 
 void addChatbotDomaintoASemanticMemory(
     SemanticMemory& pSemanticMemory,

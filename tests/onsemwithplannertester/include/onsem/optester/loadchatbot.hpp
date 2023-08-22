@@ -21,6 +21,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotParam
 struct ONSEMWITHPLANNERTESTER_API ChatbotAction
 {
   SemanticLanguageEnum language{SemanticLanguageEnum::UNKNOWN};
+  std::string idFromJson{};
   std::list<std::string> triggers{};
   std::string text{};
   std::string description{};
@@ -37,6 +38,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotDomain
 {
   std::map<SemanticLanguageEnum, std::vector<std::string>> inform{};
   std::map<cp::ActionId, ChatbotAction> actions{};
+  std::list<std::shared_ptr<cp::SetOfInferences>> inferences{};
   std::unique_ptr<cp::Domain> compiledDomain{};
 };
 
@@ -47,6 +49,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotProblem
   cp::Problem problem{};
   std::map<std::string, std::string> variables{};
   std::map<std::string, std::string> goalToRemovalConfirmation{};
+  std::shared_ptr<cp::SetOfInferences> setOfInferences{};
 };
 
 
@@ -59,6 +62,9 @@ ONSEMWITHPLANNERTESTER_API
 void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
                         std::istream& pIstream);
 
+ONSEMWITHPLANNERTESTER_API
+void addInferencesToProblem(ChatbotProblem& pChatbotProblem,
+                            const std::list<std::shared_ptr<cp::SetOfInferences>>& pInferences);
 
 
 ONSEMWITHPLANNERTESTER_API

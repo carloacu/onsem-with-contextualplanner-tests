@@ -63,6 +63,17 @@ void _convertParameters(
       pOutParameters[currParamWithValues.first] = currParamWithValues.second[0];
 }
 
+void _convertParametersVectorToSet(
+        std::map<std::string, std::set<std::string>>& pOutParameters,
+        const std::map<std::string, std::vector<std::string>>& pInParameters)
+{
+  for (auto& currParamWithValues : pInParameters)
+    for (auto& currValue : currParamWithValues.second)
+    if (!currParamWithValues.second.empty())
+      pOutParameters[currParamWithValues.first].insert(currValue);
+}
+
+
 void _convertToParametersForFacts(
         std::map<std::string, std::string>& pOutParameters,
         const std::map<std::string, std::string>& pInParameters)
@@ -777,7 +788,15 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
 
             // notify memory of the text said
             if (!text.empty())
+            {
               _saySemExp(text, actionDescription, textsToSay, _chatbotProblem->variables, textLanguage);
+            }
+            else if (!cbAction.idFromJson.empty())
+            {
+              cp::ActionInstance actInstance(cbAction.idFromJson, {});
+              _convertParametersVectorToSet(actInstance.parameters, currRobotTaskId.parameters);
+              _printChatRobotMessage(actInstance.toStr());
+            }
 
             std::map<std::string, std::string> printTableParameters;
             _convertParameters(printTableParameters, currRobotTaskId.parameters);
@@ -1430,6 +1449,7 @@ void MainWindow::on_actionAdd_domain_triggered()
   addChatbotDomaintoASemanticMemory(*_semMemoryPtr, *_chatbotDomain, _lingDb);
   if (!_chatbotProblem)
     _chatbotProblem = std::make_unique<ChatbotProblem>();
+  addInferencesToProblem(*_chatbotProblem, _chatbotDomain->inferences);
   _proactivelyAskThePlanner(now);
 }
 
@@ -1448,6 +1468,8 @@ void MainWindow::on_actionSet_problem_triggered()
   std::ifstream file(filenameStr.c_str(), std::ifstream::in);
   _chatbotProblem = std::make_unique<ChatbotProblem>();
   loadChatbotProblem(*_chatbotProblem, file);
+  if (_chatbotDomain)
+    addInferencesToProblem(*_chatbotProblem, _chatbotDomain->inferences);
   _proactivelyAskThePlanner(now);
 }
 
@@ -1466,7 +1488,7 @@ void MainWindow::_printGoalsAndFacts()
     {
       for (auto& currGoal : itGoalPrority->second)
       {
-        if (mainGoal.empty())
+        if (mainGoal.empty() && (!currGoal.isPersistent() || !_chatbotProblem->problem.isGoalSatisfied(currGoal)))
           mainGoal = currGoal.getGoalGroupId();
         ss << itGoalPrority->first << "                 ";
         if (itGoalPrority->first >= 10)
