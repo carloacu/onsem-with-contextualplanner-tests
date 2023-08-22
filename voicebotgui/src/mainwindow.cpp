@@ -1146,6 +1146,7 @@ void MainWindow::_clearLoadedScenarios()
   _lingDb.reset();
   memoryOperation::defaultKnowledge(semMemory, _lingDb);
 
+  /*
   _infActionAddedConnection.disconnect();
   _infActionAddedConnection =
       semMemory.memBloc.infActionAdded.connectUnsafe([&](intSemId, const GroundedExpWithLinks* pGroundedExpWithLinksPtr)
@@ -1170,6 +1171,7 @@ void MainWindow::_clearLoadedScenarios()
       _chatbotProblem->problem.addFact(cp::Fact("robot_learnt_a_behavior"), now);
     }
   });
+*/
 
   _scenarioContainer.clear();
   _ui->textBrowser_chat_history->clear();
