@@ -1077,8 +1077,7 @@ void MainWindow::_loadCurrScenario()
                          (_inputScenariosFolder / scenarioFilename).string(), *_semMemoryPtr, _lingDb);
   }
   _ui->textBrowser_chat_history->clear();
-  _ui->textBrowser_goals->clear();
-  _ui->textBrowser_facts->clear();
+  _printGoalsAndFacts();
   _appendLogs(linesToDisplay);
 }
 
@@ -1155,11 +1154,10 @@ void MainWindow::_clearLoadedScenarios()
 
   _scenarioContainer.clear();
   _ui->textBrowser_chat_history->clear();
-  _ui->textBrowser_goals->clear();
-  _ui->textBrowser_facts->clear();
   _ui->pushButton_Chat_PrevScenario->setEnabled(false);
   _ui->pushButton_Chat_NextScenario->setEnabled(false);
   _switchToReferenceButtonSetEnabled(false);
+  _printGoalsAndFacts();
 }
 
 void MainWindow::on_pushButton_Chat_PrevScenario_clicked()
@@ -1455,60 +1453,64 @@ void MainWindow::on_actionSet_problem_triggered()
 
 void MainWindow::_printGoalsAndFacts()
 {
-
   // Print goals
-  const auto& goals = _chatbotProblem->problem.goals();
   std::stringstream ss;
   ss << "Priority     Goal\n";
   ss << "-----------------------\n";
 
-  std::string mainGoal;
-  for (auto itGoalPrority = goals.rbegin(); itGoalPrority != goals.rend(); ++itGoalPrority)
+  if (_chatbotProblem)
   {
-    for (auto& currGoal : itGoalPrority->second)
+    const auto& goals = _chatbotProblem->problem.goals();
+    std::string mainGoal;
+    for (auto itGoalPrority = goals.rbegin(); itGoalPrority != goals.rend(); ++itGoalPrority)
     {
-      if (mainGoal.empty())
-        mainGoal = currGoal.getGoalGroupId();
-      ss << itGoalPrority->first << "                 ";
-      if (itGoalPrority->first >= 10)
-        ss << " ";
-      if (_showGoalFacts)
-        ss << currGoal.toStr();
-      else
-        ss << currGoal.getGoalGroupId();
-      ss << "\n";
+      for (auto& currGoal : itGoalPrority->second)
+      {
+        if (mainGoal.empty())
+          mainGoal = currGoal.getGoalGroupId();
+        ss << itGoalPrority->first << "                 ";
+        if (itGoalPrority->first >= 10)
+          ss << " ";
+        if (_showGoalFacts)
+          ss << currGoal.toStr();
+        else
+          ss << currGoal.getGoalGroupId();
+        ss << "\n";
+      }
     }
-  }
-  _chatbotProblem->variables["intention"] = mainGoal;
+    _chatbotProblem->variables["intention"] = mainGoal;
 
-  if (!mainGoal.empty())
-  {
-    _chatbotProblem->variables["becauseIntention"] = "Parce que " + mainGoal;
-    auto currentAction = _chatbotProblem->variables["currentAction"];
-    if (!currentAction.empty())
+    if (!mainGoal.empty())
     {
-      _chatbotProblem->variables["currentActionWithIntention"] =  _mergeFactAndReason(currentAction, mainGoal);
+      _chatbotProblem->variables["becauseIntention"] = "Parce que " + mainGoal;
+      auto currentAction = _chatbotProblem->variables["currentAction"];
+      if (!currentAction.empty())
+      {
+        _chatbotProblem->variables["currentActionWithIntention"] =  _mergeFactAndReason(currentAction, mainGoal);
+      }
+      else
+      {
+        _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
+      }
     }
     else
     {
+      _chatbotProblem->variables["becauseIntention"] = "Je ne sais pas.";
       _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
     }
   }
-  else
-  {
-    _chatbotProblem->variables["becauseIntention"] = "Je ne sais pas.";
-    _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
-  }
-
   _ui->textBrowser_goals->clear();
   _ui->textBrowser_goals->append(QString::fromUtf8(ss.str().c_str()));
 
   // Print facts
   {
-    const auto& facts = _chatbotProblem->problem.facts();
     std::stringstream ssFacts;
-    for (auto& currFact : facts)
-      ssFacts << currFact.toStr() << "\n";
+    if (_chatbotProblem)
+    {
+      const auto& facts = _chatbotProblem->problem.facts();
+      for (auto& currFact : facts)
+        ssFacts << currFact.toStr() << "\n";
+    }
 
     _ui->textBrowser_facts->clear();
     _ui->textBrowser_facts->append(QString::fromUtf8(ssFacts.str().c_str()));
@@ -1527,6 +1529,10 @@ void MainWindow::_proactivelyAskThePlanner(const std::unique_ptr<std::chrono::st
 void MainWindow::on_pushButton_goals_view_clicked()
 {
   _showGoalFacts = !_showGoalFacts;
+  if (_showGoalFacts)
+    _ui->pushButton_goals_view->setText("Show goals in natural language");
+  else
+    _ui->pushButton_goals_view->setText("Show goals in pddl condition");
   _printGoalsAndFacts();
 }
 
