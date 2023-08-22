@@ -899,11 +899,14 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 {
   if (_chatbotDomain && _chatbotProblem)
   {
-    std::set<std::string> actionIdsToSkip;
+    std::set<std::string> actionToSkip;
     while (true)
     {
       auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
-      if (oneStepOfPlannerResult && actionIdsToSkip.count(oneStepOfPlannerResult->actionInstance.actionId) == 0)
+      if (!oneStepOfPlannerResult)
+        break;
+      auto actionStr = oneStepOfPlannerResult->actionInstance.toStr();
+      if (actionToSkip.count(actionStr) == 0)
       {
         auto actionId = oneStepOfPlannerResult->actionInstance.actionId;
         auto itAction = _chatbotDomain->actions.find(actionId);
@@ -932,7 +935,7 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 
           if (cbAction.potentialEffect && !cbAction.effect)
             break;
-          actionIdsToSkip.insert(oneStepOfPlannerResult->actionInstance.actionId);
+          actionToSkip.insert(actionStr);
           continue;
         }
       }
@@ -1512,7 +1515,6 @@ void MainWindow::_printGoalsAndFacts()
 
     if (!mainGoal.empty())
     {
-      _chatbotProblem->variables["becauseIntention"] = "Parce que " + mainGoal;
       auto currentAction = _chatbotProblem->variables["currentAction"];
       if (!currentAction.empty())
       {
@@ -1522,11 +1524,13 @@ void MainWindow::_printGoalsAndFacts()
       {
         _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
       }
+      onsem::lowerCaseFirstLetter(mainGoal);
+      _chatbotProblem->variables["becauseIntention"] = "Parce que " + mainGoal;
     }
     else
     {
-      _chatbotProblem->variables["becauseIntention"] = "Je ne sais pas.";
       _chatbotProblem->variables["currentActionWithIntention"] = "Je ne sais pas.";
+      _chatbotProblem->variables["becauseIntention"] = "Je ne sais pas.";
     }
   }
   _ui->textBrowser_goals->clear();
