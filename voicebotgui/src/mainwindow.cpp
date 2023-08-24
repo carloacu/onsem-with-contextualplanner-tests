@@ -54,6 +54,13 @@ static const QString microStr = "micro";
 static const QString stopMicroStr = "stop";
 const std::string _tmpFolder = ".";
 
+void _lowerTheCaseOfValues(
+        std::map<std::string, std::string>& pElts)
+{
+  for (auto& currElt : pElts)
+    onsem::lowerCaseFirstLetter(currElt.second);
+}
+
 void _convertParameters(
         std::map<std::string, std::string>& pOutParameters,
         const std::map<std::string, std::vector<std::string>>& pInParameters)
@@ -812,9 +819,14 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
             {
               auto intentionNaturalLanguage = cbAction.goalDescription;
               if (!intentionNaturalLanguage.empty())
+              {
+                _lowerTheCaseOfValues(printTableParameters);
                 cp::replaceVariables(intentionNaturalLanguage, printTableParameters);
+              }
               else
+              {
                 intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
+              }
 
               for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
                 for (const auto& currGoal : currGoalWithPririty.second)
