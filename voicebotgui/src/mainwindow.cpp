@@ -1514,8 +1514,8 @@ void MainWindow::_printGoalsAndFacts()
         if (mainGoal.empty() && (!currGoal.isPersistent() || !_chatbotProblem->problem.isGoalSatisfied(currGoal)))
           mainGoal = currGoal.getGoalGroupId();
         ss << itGoalPrority->first << "                 ";
-        if (itGoalPrority->first >= 10)
-          ss << " ";
+        if (itGoalPrority->first < 10)
+          ss << "  ";
         if (_showGoalFacts)
           ss << currGoal.toStr();
         else
