@@ -1,7 +1,7 @@
 #include <onsem/optester/loadchatbot.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
-#include <contextualplanner/types/factcondition.hpp>
+#include <contextualplanner/types/condition.hpp>
 #include <contextualplanner/types/setofinferences.hpp>
 #include <onsem/common/utility/lexical_cast.hpp>
 #include <onsem/texttosemantic/dbtype/semanticexpression/fixedsynthesisexpression.hpp>
@@ -61,13 +61,12 @@ void _loadGoals(
 }
 
 
-std::shared_ptr<cp::SetOfInferences> _loadInferences(const boost::property_tree::ptree& pTree)
+cp::SetOfInferences _loadInferences(const boost::property_tree::ptree& pTree)
 {
-  auto setOfInferences = std::make_shared<cp::SetOfInferences>();
-  std::size_t inferenceCounter = 1;
+  cp::SetOfInferences setOfInferences;
   for (auto& currInferenceTree : pTree)
   {
-    auto condition = cp::FactCondition::fromStr(currInferenceTree.second.get("condition", ""));
+    auto condition = cp::Condition::fromStr(currInferenceTree.second.get("condition", ""));
     auto effect = cp::FactModification::fromStr(currInferenceTree.second.get("effect", ""));
 
     if (condition && effect)
@@ -78,16 +77,15 @@ std::shared_ptr<cp::SetOfInferences> _loadInferences(const boost::property_tree:
       if (parametersTreeOpt)
         for (auto& currParameterTree : *parametersTreeOpt)
           inference.parameters.push_back(currParameterTree.second.get_value<std::string>());
-      std::stringstream ssId;
-      ssId << "inference" << inferenceCounter;
-      ++inferenceCounter;
-      setOfInferences->addInference(ssId.str(), inference);
+      setOfInferences.addInference(inference);
     }
   }
   return setOfInferences;
 }
 
 }
+
+
 
 void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
                        std::istream& pIstream)
@@ -185,8 +183,8 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
           prefereInContextSs << "lowPriority" << timeEstimation;
           --timeEstimation;
         }
-        currChatbotAction.preferInContext = cp::FactCondition::fromStr(prefereInContextSs.str());
-        currChatbotAction.precondition = cp::FactCondition::fromStr(currActionTree.second.get("precondition", ""));
+        currChatbotAction.preferInContext = cp::Condition::fromStr(prefereInContextSs.str());
+        currChatbotAction.precondition = cp::Condition::fromStr(currActionTree.second.get("precondition", ""));
         currChatbotAction.effect = cp::FactModification::fromStr(currActionTree.second.get("effect", ""));
         currChatbotAction.potentialEffect = cp::FactModification::fromStr(currActionTree.second.get("potentialEffect", ""));
         currChatbotAction.description = currActionTree.second.get("description", "");
@@ -199,8 +197,7 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
     }
     else if (currChatbotAttr.first == "inferences")
     {
-      auto setOfInferences = _loadInferences(currChatbotAttr.second);
-      pChatbotDomain.inferences.emplace_back(setOfInferences);
+      pChatbotDomain.compiledDomain.addSetOfInferences(_loadInferences(currChatbotAttr.second));
     }
   }
 }
@@ -241,39 +238,23 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
     else if (currChatbotAttr.first == "facts")
     {
       for (auto& currFactTree : currChatbotAttr.second)
-        pChatbotProblem.problem.addFact(cp::Fact::fromStr(currFactTree.second.get_value<std::string>()), now);
+        pChatbotProblem.problem.worldState.addFact(cp::Fact::fromStr(currFactTree.second.get_value<std::string>()),
+                                                   pChatbotProblem.problem.goalStack, pChatbotDomain.compiledDomain.getSetOfInferences(), now);
     }
     else if (currChatbotAttr.first == "goals")
     {
       std::map<int, std::vector<cp::Goal>> goals;
       _loadGoals(goals, currChatbotAttr.second);
-      pChatbotProblem.problem.addGoals(goals, now);
+      pChatbotProblem.problem.goalStack.addGoals(goals, pChatbotProblem.problem.worldState, now);
     }
     else if (currChatbotAttr.first == "inferences")
     {
-      pChatbotProblem.setOfInferences = _loadInferences(currChatbotAttr.second);
+      throw std::runtime_error("the inferences should be in the domain");
+      assert(false);
     }
   }
 }
 
-
-void addInferencesToProblem(ChatbotProblem& pChatbotProblem,
-                            const std::list<std::shared_ptr<cp::SetOfInferences>>& pInferences)
-{
-  pChatbotProblem.problem.clearInferences();
-
-  if (pChatbotProblem.setOfInferences)
-    pChatbotProblem.problem.addSetOfInferences("soi", pChatbotProblem.setOfInferences);
-
-  int id = 1;
-  for (auto& currSetOfInferences : pInferences)
-  {
-    std::stringstream ss;
-    ss << "soi_domian_" << id;
-    ++id;
-    pChatbotProblem.problem.addSetOfInferences(ss.str(), currSetOfInferences);
-  }
-}
 
 void addChatbotDomaintoASemanticMemory(
     SemanticMemory& pSemanticMemory,
@@ -326,16 +307,16 @@ void addChatbotDomaintoASemanticMemory(
       }
     }
 
-    cp::Action action(currAction.precondition ? currAction.precondition->clone() : std::unique_ptr<cp::FactCondition>(),
+    cp::Action action(currAction.precondition ? currAction.precondition->clone() : std::unique_ptr<cp::Condition>(),
                       currAction.effect ? currAction.effect->clone(nullptr) : std::unique_ptr<cp::FactModification>(),
-                      currAction.preferInContext ? currAction.preferInContext->clone() : std::unique_ptr<cp::FactCondition>());
+                      currAction.preferInContext ? currAction.preferInContext->clone() : std::unique_ptr<cp::Condition>());
     for (auto& currParam : currAction.parameters)
       action.parameters.emplace_back(currParam.text);
     if (currAction.potentialEffect)
       action.effect.potentialFactsModifications = currAction.potentialEffect->clone(nullptr);
     actions.emplace(currActionWithId.first, std::move(action));
   }
-  pChatbotDomain.compiledDomain = std::make_unique<cp::Domain>(actions);
+  pChatbotDomain.compiledDomain = cp::Domain(actions);
 }
 
 

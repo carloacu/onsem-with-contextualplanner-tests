@@ -712,6 +712,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
                                      const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow)
 {
   _ui->textBrowser_chat_history->setTextColor(_inFontColor);
+  auto& setOfInferences = _chatbotDomain->compiledDomain.getSetOfInferences();
 
   LineEditHistoricalWrapper& hWrapper = _lineEditHistorical[_ui->lineEdit_history_newText];
   hWrapper.addNewText(pText, true);
@@ -722,14 +723,18 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
   {
     auto factToAddStr = pText.substr(1, pText.size() - 1);
     _ui->textBrowser_chat_history->append("addFact: " + QString::fromUtf8(factToAddStr.c_str()));
-    _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr(factToAddStr), pNow);
+    _chatbotProblem->problem.worldState.modifyFacts(cp::FactModification::fromStr(factToAddStr),
+                                                    _chatbotProblem->problem.goalStack,
+                                                    setOfInferences, pNow);
     _proactivityFromPlanner(textsToSay, pNow);
   }
   else if (!pText.empty() && pText[0] == '-')
   {
     auto factToAddStr = pText.substr(1, pText.size() - 1);
     _ui->textBrowser_chat_history->append("removeFact: " + QString::fromUtf8(factToAddStr.c_str()));
-    _chatbotProblem->problem.modifyFacts(cp::FactModification::fromStr("!" + factToAddStr), pNow);
+    _chatbotProblem->problem.worldState.modifyFacts(cp::FactModification::fromStr("!" + factToAddStr),
+                                                    _chatbotProblem->problem.goalStack,
+                                                    setOfInferences, pNow);
     _proactivityFromPlanner(textsToSay, pNow);
   }
   else
@@ -773,7 +778,8 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
       {
         if (!currRobotTaskId.goalToRemove.empty())
         {
-          if (_chatbotProblem->problem.removeGoals(currRobotTaskId.goalToRemove, pNow))
+          if (_chatbotProblem->problem.goalStack.removeGoals(currRobotTaskId.goalToRemove,
+                                                             _chatbotProblem->problem.worldState, pNow))
           {
             auto itRemovalConf = _chatbotProblem->goalToRemovalConfirmation.find(currRobotTaskId.goalToRemove);
             if (itRemovalConf != _chatbotProblem->goalToRemovalConfirmation.end())
@@ -810,7 +816,9 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
             std::map<std::string, std::string> parameters;
             _convertToParametersForFacts(parameters, printTableParameters);
             if (cbAction.effect)
-              _chatbotProblem->problem.modifyFacts(cbAction.effect->clone(&parameters), pNow);
+              _chatbotProblem->problem.worldState.modifyFacts(cbAction.effect->clone(&parameters),
+                                                              _chatbotProblem->problem.goalStack,
+                                                              setOfInferences, pNow);
 
             cp::replaceVariables(actionDescription, printTableParameters);
             _chatbotProblem->variables["currentAction"] = actionDescription;
@@ -830,9 +838,10 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
 
               for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
                 for (const auto& currGoal : currGoalWithPririty.second)
-                  _chatbotProblem->problem.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage), pNow, currGoalWithPririty.first);
+                  _chatbotProblem->problem.goalStack.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage),
+                                                                   _chatbotProblem->problem.worldState, pNow, currGoalWithPririty.first);
 
-              auto* goalPtr = _chatbotProblem->problem.getCurrentGoalPtr();
+              auto* goalPtr = _chatbotProblem->problem.goalStack.getCurrentGoalPtr();
               if (goalPtr == nullptr || goalPtr->getGoalGroupId() != intentionNaturalLanguage)
               {
                 std::string sayIWillDoItAfter;
@@ -914,7 +923,7 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
     std::set<std::string> actionToSkip;
     while (true)
     {
-      auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
+      auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, _chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
       if (!oneStepOfPlannerResult)
         break;
       auto actionStr = oneStepOfPlannerResult->actionInstance.toStr();
@@ -943,7 +952,7 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
           cp::replaceVariables(actionDescription, printableParameters);
           _chatbotProblem->variables["currentAction"] = actionDescription;
 
-          cp::notifyActionDone(_chatbotProblem->problem, *_chatbotDomain->compiledDomain, *oneStepOfPlannerResult, pNow);
+          cp::notifyActionDone(_chatbotProblem->problem, _chatbotDomain->compiledDomain, *oneStepOfPlannerResult, pNow);
 
           if (cbAction.potentialEffect && !cbAction.effect)
             break;
@@ -1464,9 +1473,6 @@ void MainWindow::on_actionAdd_domain_triggered()
     _chatbotDomain = std::make_unique<ChatbotDomain>();
   loadChatbotDomain(*_chatbotDomain, file);
   addChatbotDomaintoASemanticMemory(*_semMemoryPtr, *_chatbotDomain, _lingDb);
-  if (!_chatbotProblem)
-    _chatbotProblem = std::make_unique<ChatbotProblem>();
-  addInferencesToProblem(*_chatbotProblem, _chatbotDomain->inferences);
   _proactivelyAskThePlanner(now);
 }
 
@@ -1492,7 +1498,6 @@ void MainWindow::on_actionSet_problem_triggered()
     _chatbotDomain = std::make_unique<ChatbotDomain>();
   loadChatbotProblem(*_chatbotProblem, *_chatbotDomain, file, path);
   addChatbotDomaintoASemanticMemory(*_semMemoryPtr, *_chatbotDomain, _lingDb);
-  addInferencesToProblem(*_chatbotProblem, _chatbotDomain->inferences);
   _proactivelyAskThePlanner(now);
 }
 
@@ -1505,13 +1510,13 @@ void MainWindow::_printGoalsAndFacts()
 
   if (_chatbotProblem)
   {
-    const auto& goals = _chatbotProblem->problem.goals();
+    const auto& goals = _chatbotProblem->problem.goalStack.goals();
     std::string mainGoal;
     for (auto itGoalPrority = goals.rbegin(); itGoalPrority != goals.rend(); ++itGoalPrority)
     {
       for (auto& currGoal : itGoalPrority->second)
       {
-        if (mainGoal.empty() && (!currGoal.isPersistent() || !_chatbotProblem->problem.isGoalSatisfied(currGoal)))
+        if (mainGoal.empty() && (!currGoal.isPersistent() || !_chatbotProblem->problem.worldState.isGoalSatisfied(currGoal)))
           mainGoal = currGoal.getGoalGroupId();
         ss << itGoalPrority->first << "                 ";
         if (itGoalPrority->first < 10)
@@ -1553,7 +1558,7 @@ void MainWindow::_printGoalsAndFacts()
     std::stringstream ssFacts;
     if (_chatbotProblem)
     {
-      const auto& facts = _chatbotProblem->problem.facts();
+      const auto& facts = _chatbotProblem->problem.worldState.facts();
       for (auto& currFact : facts)
         ssFacts << currFact.toStr() << "\n";
     }

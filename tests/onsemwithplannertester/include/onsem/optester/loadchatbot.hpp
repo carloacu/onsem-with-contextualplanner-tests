@@ -26,8 +26,8 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotAction
   std::string text{};
   std::string description{};
   std::vector<ChatbotParam> parameters{};
-  std::unique_ptr<cp::FactCondition> precondition{};
-  std::unique_ptr<cp::FactCondition> preferInContext{};
+  std::unique_ptr<cp::Condition> precondition{};
+  std::unique_ptr<cp::Condition> preferInContext{};
   std::unique_ptr<cp::FactModification> effect{};
   std::unique_ptr<cp::FactModification> potentialEffect{};
   std::map<int, std::vector<cp::Goal>> goalsToAdd{};
@@ -38,8 +38,7 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotDomain
 {
   std::map<SemanticLanguageEnum, std::vector<std::string>> inform{};
   std::map<cp::ActionId, ChatbotAction> actions{};
-  std::list<std::shared_ptr<cp::SetOfInferences>> inferences{};
-  std::unique_ptr<cp::Domain> compiledDomain{};
+  cp::Domain compiledDomain{};
 };
 
 
@@ -49,7 +48,6 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotProblem
   cp::Problem problem{};
   std::map<std::string, std::string> variables{};
   std::map<std::string, std::string> goalToRemovalConfirmation{};
-  std::shared_ptr<cp::SetOfInferences> setOfInferences{};
 };
 
 
@@ -63,11 +61,6 @@ void loadChatbotProblem(ChatbotProblem& pChatbotProblem,
                         ChatbotDomain& pChatbotDomain,
                         std::istream& pIstream,
                         const std::string &pPath);
-
-ONSEMWITHPLANNERTESTER_API
-void addInferencesToProblem(ChatbotProblem& pChatbotProblem,
-                            const std::list<std::shared_ptr<cp::SetOfInferences>>& pInferences);
-
 
 ONSEMWITHPLANNERTESTER_API
 void addChatbotDomaintoASemanticMemory(
