@@ -67,7 +67,7 @@ cp::SetOfInferences _loadInferences(const boost::property_tree::ptree& pTree)
   for (auto& currInferenceTree : pTree)
   {
     auto condition = cp::Condition::fromStr(currInferenceTree.second.get("condition", ""));
-    auto effect = cp::FactModification::fromStr(currInferenceTree.second.get("effect", ""));
+    auto effect = cp::WorldStateModification::fromStr(currInferenceTree.second.get("effect", ""));
 
     if (condition && effect)
     {
@@ -185,8 +185,8 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
         }
         currChatbotAction.preferInContext = cp::Condition::fromStr(prefereInContextSs.str());
         currChatbotAction.precondition = cp::Condition::fromStr(currActionTree.second.get("precondition", ""));
-        currChatbotAction.effect = cp::FactModification::fromStr(currActionTree.second.get("effect", ""));
-        currChatbotAction.potentialEffect = cp::FactModification::fromStr(currActionTree.second.get("potentialEffect", ""));
+        currChatbotAction.effect = cp::WorldStateModification::fromStr(currActionTree.second.get("effect", ""));
+        currChatbotAction.potentialEffect = cp::WorldStateModification::fromStr(currActionTree.second.get("potentialEffect", ""));
         currChatbotAction.description = currActionTree.second.get("description", "");
         currChatbotAction.goalDescription = currActionTree.second.get("goalDescription", "");
 
@@ -308,12 +308,12 @@ void addChatbotDomaintoASemanticMemory(
     }
 
     cp::Action action(currAction.precondition ? currAction.precondition->clone() : std::unique_ptr<cp::Condition>(),
-                      currAction.effect ? currAction.effect->clone(nullptr) : std::unique_ptr<cp::FactModification>(),
+                      currAction.effect ? currAction.effect->clone(nullptr) : std::unique_ptr<cp::WorldStateModification>(),
                       currAction.preferInContext ? currAction.preferInContext->clone() : std::unique_ptr<cp::Condition>());
     for (auto& currParam : currAction.parameters)
       action.parameters.emplace_back(currParam.text);
     if (currAction.potentialEffect)
-      action.effect.potentialFactsModifications = currAction.potentialEffect->clone(nullptr);
+      action.effect.potentialWorldStateModification = currAction.potentialEffect->clone(nullptr);
     actions.emplace(currActionWithId.first, std::move(action));
   }
   pChatbotDomain.compiledDomain = cp::Domain(actions);

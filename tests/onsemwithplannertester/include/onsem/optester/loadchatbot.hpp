@@ -28,8 +28,8 @@ struct ONSEMWITHPLANNERTESTER_API ChatbotAction
   std::vector<ChatbotParam> parameters{};
   std::unique_ptr<cp::Condition> precondition{};
   std::unique_ptr<cp::Condition> preferInContext{};
-  std::unique_ptr<cp::FactModification> effect{};
-  std::unique_ptr<cp::FactModification> potentialEffect{};
+  std::unique_ptr<cp::WorldStateModification> effect{};
+  std::unique_ptr<cp::WorldStateModification> potentialEffect{};
   std::map<int, std::vector<cp::Goal>> goalsToAdd{};
   std::string goalDescription{};
 };

@@ -476,28 +476,30 @@ void MainWindow::onRescaleChatPanel()
     int asrFrameY = _ui->tab_Chat->height() - _bottomBoxHeight - 10;
     int goalsHeight = 300;
     int goalsWidth = (_ui->tab_Chat->width() / 2) - 10;
+    int stateHeight = 300;
 
     _ui->textBrowser_chat_history->setGeometry(10,
                                                mainFrameY,
                                                _ui->tab_Chat->width() - 20 - goalsWidth,
                                                asrFrameY - mainFrameY - 20);
 
-    _ui->label_goals->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
-                                  mainFrameY,
-                                  goalsWidth,
-                                  _ui->label_goals->height());
-
-
     _ui->pushButton_goals_view->setGeometry(10 + _ui->textBrowser_chat_history->width() + 130,
                                             mainFrameY - 5,
                                             _ui->pushButton_goals_view->width(),
                                             _ui->pushButton_goals_view->height());
+
+    // goals
+    _ui->label_goals->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
+                                  mainFrameY,
+                                  goalsWidth,
+                                  _ui->label_goals->height());
 
     _ui->textBrowser_goals->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                         mainFrameY + 10 + _ui->label_goals->height(),
                                         goalsWidth,
                                         goalsHeight);
 
+    // world state
     _ui->label_world_state->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                   mainFrameY + goalsHeight,
                                   goalsWidth,
@@ -506,7 +508,19 @@ void MainWindow::onRescaleChatPanel()
     _ui->textBrowser_facts->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
                                         mainFrameY + goalsHeight + 10 + _ui->label_world_state->height(),
                                         goalsWidth,
-                                        asrFrameY - mainFrameY - 20  - goalsHeight);
+                                        stateHeight);
+
+    // plan
+    _ui->label_plan->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
+                                 mainFrameY + goalsHeight + stateHeight,
+                                 goalsWidth,
+                                 _ui->label_world_state->height());
+
+    _ui->textBrowser_plan->setGeometry(10 + _ui->textBrowser_chat_history->width() + 10,
+                                       mainFrameY + goalsHeight + stateHeight + 10 + _ui->label_plan->height(),
+                                       goalsWidth,
+                                       asrFrameY - mainFrameY - 20  - goalsHeight - 20 - stateHeight);
+
   }
 
   // speech frame
@@ -719,25 +733,25 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
   hWrapper.goToEndOfHistorical();
 
   std::list<TextWithLanguage> textsToSay;
-  if (!pText.empty() && pText[0] == '+')
+  if (!pText.empty() && pText[0] == '+') // If it begins with '+' it means that it is a fact to add
   {
     auto factToAddStr = pText.substr(1, pText.size() - 1);
     _ui->textBrowser_chat_history->append("addFact: " + QString::fromUtf8(factToAddStr.c_str()));
-    _chatbotProblem->problem.worldState.modifyFacts(cp::FactModification::fromStr(factToAddStr),
-                                                    _chatbotProblem->problem.goalStack,
-                                                    setOfInferences, pNow);
+    _chatbotProblem->problem.worldState.modify(cp::WorldStateModification::fromStr(factToAddStr),
+                                               _chatbotProblem->problem.goalStack,
+                                               setOfInferences, pNow);
     _proactivityFromPlanner(textsToSay, pNow);
   }
-  else if (!pText.empty() && pText[0] == '-')
+  else if (!pText.empty() && pText[0] == '-') // If it begins with '-' it means that it is a fact to remove
   {
     auto factToAddStr = pText.substr(1, pText.size() - 1);
     _ui->textBrowser_chat_history->append("removeFact: " + QString::fromUtf8(factToAddStr.c_str()));
-    _chatbotProblem->problem.worldState.modifyFacts(cp::FactModification::fromStr("!" + factToAddStr),
-                                                    _chatbotProblem->problem.goalStack,
-                                                    setOfInferences, pNow);
+    _chatbotProblem->problem.worldState.modify(cp::WorldStateModification::fromStr("!" + factToAddStr),
+                                               _chatbotProblem->problem.goalStack,
+                                               setOfInferences, pNow);
     _proactivityFromPlanner(textsToSay, pNow);
   }
-  else
+  else // Else it means that it is a natural language text
   {
     if (pText.empty())
       _ui->textBrowser_chat_history->append("ping");
@@ -816,9 +830,9 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
             std::map<std::string, std::string> parameters;
             _convertToParametersForFacts(parameters, printTableParameters);
             if (cbAction.effect)
-              _chatbotProblem->problem.worldState.modifyFacts(cbAction.effect->clone(&parameters),
-                                                              _chatbotProblem->problem.goalStack,
-                                                              setOfInferences, pNow);
+              _chatbotProblem->problem.worldState.modify(cbAction.effect->clone(&parameters),
+                                                         _chatbotProblem->problem.goalStack,
+                                                         setOfInferences, pNow);
 
             cp::replaceVariables(actionDescription, printTableParameters);
             _chatbotProblem->variables["currentAction"] = actionDescription;
@@ -920,6 +934,9 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 {
   if (_chatbotDomain && _chatbotProblem)
   {
+    auto copiedProblem = _chatbotProblem->problem;
+    auto copiedHistorical = _chatbotProblem->problem.historical;
+
     std::set<std::string> actionToSkip;
     while (true)
     {
@@ -963,6 +980,12 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
       break;
     }
     _printGoalsAndFacts();
+
+    // Print plan
+    auto plan = cp::lookForResolutionPlan(copiedProblem, _chatbotDomain->compiledDomain, pNow, &copiedHistorical);
+    auto planStr = cp::planToStr(plan, "\n");
+    _ui->textBrowser_plan->clear();
+    _ui->textBrowser_plan->append(QString::fromUtf8(planStr.c_str()));
   }
 }
 
