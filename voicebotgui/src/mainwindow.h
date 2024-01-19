@@ -197,12 +197,14 @@ private:
                            const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
   void _proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSay,
                                const std::unique_ptr<std::chrono::steady_clock::time_point>& pNow);
-  void _printChatRobotMessage(const std::string& pText);
+  void _printChatRobotMessage(const std::string& pText,
+                              const long* pDurationInMicroSecPtr = nullptr);
   void _saySemExp(std::string& pText,
                   std::string& pActionDescription,
                   std::list<TextWithLanguage>& pTextsToSay,
                   const std::map<std::string, std::string>& pVariables,
-                  SemanticLanguageEnum pLanguage);
+                  SemanticLanguageEnum pLanguage,
+                  const std::string* pTimeElapsedPtr = nullptr);
   void _sayText(std::list<TextWithLanguage>& pTextsToSay);
   void _loadCurrScenario();
   void _switchToReferenceButtonSetEnabled(bool pEnabled);

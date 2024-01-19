@@ -940,7 +940,14 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
     std::set<std::string> actionToSkip;
     while (true)
     {
+      auto start = std::chrono::high_resolution_clock::now();
       auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, _chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto timeElapsedByThePlanner = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+      std::stringstream ss;
+      ss << "                    " << timeElapsedByThePlanner / 1000.0 << " ms";
+      auto timeElapsedByThePlannerStr = ss.str();
+
       if (!oneStepOfPlannerResult)
         break;
       auto actionStr = oneStepOfPlannerResult->actionInstance.toStr();
@@ -959,11 +966,11 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
           if (!cbAction.text.empty())
           {
             std::string text = cbAction.text;
-            _saySemExp(text, actionDescription, pTextsToSay, printableParameters, cbAction.language);
+            _saySemExp(text, actionDescription, pTextsToSay, printableParameters, cbAction.language, &timeElapsedByThePlannerStr);
           }
           else
           {
-            _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr());
+            _printChatRobotMessage(oneStepOfPlannerResult->actionInstance.toStr() + timeElapsedByThePlannerStr);
           }
 
           cp::replaceVariables(actionDescription, printableParameters);
@@ -990,17 +997,27 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
 }
 
 
-void MainWindow::_printChatRobotMessage(const std::string& pText)
+void MainWindow::_printChatRobotMessage(const std::string& pText,
+                                        const long int* pDurationInMicroSecPtr)
 {
   _ui->textBrowser_chat_history->setTextColor(_outFontColor);
-  _ui->textBrowser_chat_history->append(QString::fromUtf8(pText.c_str()));
+  std::string line = pText.c_str();
+  if (pDurationInMicroSecPtr != nullptr)
+  {
+    std::stringstream ss;
+    ss << "                    " << *pDurationInMicroSecPtr / 1000.0 << " ms";
+    line += ss.str();
+  }
+  _ui->textBrowser_chat_history->append(line.c_str());
+
 }
 
 void MainWindow::_saySemExp(std::string& pText,
                             std::string& pActionDescription,
                             std::list<TextWithLanguage>& pTextsToSay,
                             const std::map<std::string, std::string>& pVariables,
-                            SemanticLanguageEnum pLanguage)
+                            SemanticLanguageEnum pLanguage,
+                            const std::string* pTimeElapsedPtr)
 {
   cp::replaceVariables(pText, pVariables);
   mystd::replace_all(pText, " est les ", " sont les ");
@@ -1026,7 +1043,10 @@ void MainWindow::_saySemExp(std::string& pText,
   }
   memoryOperation::inform(std::move(semExp), *_semMemoryPtr, _lingDb);
 
-  _printChatRobotMessage("tts: \"" + pText + "\"");
+  auto line = "tts: \"" + pText + "\"";
+  if (pTimeElapsedPtr != nullptr)
+    line += *pTimeElapsedPtr;
+  _printChatRobotMessage(line);
   pTextsToSay.emplace_back(pText, pLanguage);
 }
 
