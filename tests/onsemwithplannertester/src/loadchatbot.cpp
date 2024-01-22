@@ -320,7 +320,10 @@ void addChatbotDomaintoASemanticMemory(
       action.effect.potentialWorldStateModification = currAction.potentialEffect->clone(nullptr);
     actions.emplace(currActionWithId.first, std::move(action));
   }
+  auto setOfInferences = pChatbotDomain.compiledDomain.getSetOfInferences();
   pChatbotDomain.compiledDomain = cp::Domain(actions);
+  for (auto& currSoi : setOfInferences)
+    pChatbotDomain.compiledDomain.addSetOfInferences(currSoi.second, currSoi.first);
 }
 
 
