@@ -837,7 +837,7 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
             cp::replaceVariables(actionDescription, printTableParameters);
             _chatbotProblem->variables["currentAction"] = actionDescription;
 
-            if (!cbAction.goalsToAdd.empty())
+            if (!cbAction.pushBackGoals.empty() || !cbAction.pushFrontGoals.empty())
             {
               auto intentionNaturalLanguage = cbAction.goalDescription;
               if (!intentionNaturalLanguage.empty())
@@ -850,10 +850,15 @@ void MainWindow::_onNewTextSubmitted(const std::string& pText,
                 intentionNaturalLanguage = _imperativeToMandatory(*semExp, textLanguage, semMemory, _lingDb);
               }
 
-              for (const auto& currGoalWithPririty : cbAction.goalsToAdd)
-                for (const auto& currGoal : currGoalWithPririty.second)
-                  _chatbotProblem->problem.goalStack.pushFrontGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage),
+              for (const auto& currGoalWithPririty : cbAction.pushFrontGoals)
+                for (auto itGoal = currGoalWithPririty.second.rbegin(); itGoal != currGoalWithPririty.second.rend(); ++itGoal)
+                  _chatbotProblem->problem.goalStack.pushFrontGoal(cp::Goal(*itGoal, &parameters, &intentionNaturalLanguage),
                                                                    _chatbotProblem->problem.worldState, pNow, currGoalWithPririty.first);
+
+              for (const auto& currGoalWithPririty : cbAction.pushBackGoals)
+                for (const auto& currGoal : currGoalWithPririty.second)
+                  _chatbotProblem->problem.goalStack.pushBackGoal(cp::Goal(currGoal, &parameters, &intentionNaturalLanguage),
+                                                                  _chatbotProblem->problem.worldState, pNow, currGoalWithPririty.first);
 
               auto* goalPtr = _chatbotProblem->problem.goalStack.getCurrentGoalPtr();
               if (goalPtr == nullptr || goalPtr->getGoalGroupId() != intentionNaturalLanguage)

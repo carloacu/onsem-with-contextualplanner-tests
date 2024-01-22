@@ -190,9 +190,13 @@ void loadChatbotDomain(ChatbotDomain& pChatbotDomain,
         currChatbotAction.description = currActionTree.second.get("description", "");
         currChatbotAction.goalDescription = currActionTree.second.get("goalDescription", "");
 
-        auto goalsToAddTreeOpt = currActionTree.second.get_child_optional("goalsToAdd");
-        if (goalsToAddTreeOpt)
-          _loadGoals(currChatbotAction.goalsToAdd, *goalsToAddTreeOpt);
+        auto pushFrontGoalsTreeOpt = currActionTree.second.get_child_optional("pushFrontGoals");
+        if (pushFrontGoalsTreeOpt)
+          _loadGoals(currChatbotAction.pushFrontGoals, *pushFrontGoalsTreeOpt);
+
+        auto pushBackGoalsTreeOpt = currActionTree.second.get_child_optional("pushBackGoals");
+        if (pushBackGoalsTreeOpt)
+          _loadGoals(currChatbotAction.pushBackGoals, *pushBackGoalsTreeOpt);
       }
     }
     else if (currChatbotAttr.first == "inferences")
