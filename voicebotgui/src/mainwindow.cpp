@@ -946,7 +946,7 @@ void MainWindow::_proactivityFromPlanner(std::list<TextWithLanguage>& pTextsToSa
     while (true)
     {
       auto start = std::chrono::high_resolution_clock::now();
-      auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, _chatbotDomain->compiledDomain, pNow, &_chatbotProblem->problem.historical);
+      auto oneStepOfPlannerResult = cp::lookForAnActionToDo(_chatbotProblem->problem, _chatbotDomain->compiledDomain, true, pNow, &_chatbotProblem->problem.historical);
       auto end = std::chrono::high_resolution_clock::now();
       auto timeElapsedByThePlanner = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
       std::stringstream ss;
